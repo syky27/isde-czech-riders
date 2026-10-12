@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Czech riders at ISDE 2026</title>
+<meta name="description" content="Live special-test times and overall standings of the Czech riders at the FIM International Six Days Enduro 2026 in Portugal.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='16' fill='%23fff'/%3E%3Crect y='16' width='32' height='16' fill='%23d7141a'/%3E%3Cpath d='M0 0l16 16L0 32z' fill='%2311457e'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="masthead">
+  <div class="masthead__title">
+    <h1>Czech riders</h1>
+    <p class="masthead__sub">FIM International Six Days Enduro 2026, Portugal</p>
+  </div>
+  <nav class="days" id="days" aria-label="Day of the event"></nav>
+</header>
+
+<p class="status" id="status" role="status" aria-live="polite" data-tone="ok">Loading results from the timing server…</p>
+
+<main id="main"></main>
+
+<footer class="legend">
+  <p><b>Pos</b> is the rider's place in the day classification after the last test they have finished, counting every rider in that classification. The line below it is the place within their category in that same classification. <b>Overall</b> is the cumulative standing across days as published by the timing provider. Red marks the fastest Czech time in a test. All times are provisional until the official results are published.</p>
+  <p>Data: official timing by Microplus and FICR, the same feed behind <a href="https://www.fim-6days.com/info/results">fim-6days.com/info/results</a>.</p>
+</footer>
+
+<script type="module" src="src/app.js"></script>
+</body>
+</html>

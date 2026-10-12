@@ -1,0 +1,290 @@
+:root {
+  --paper: #ffffff;
+  --sheet: #eef2f7;
+  --rule: #cfd8e3;
+  --rule-strong: #0b1f3a;
+  --ink: #0b1f3a;
+  --ink-soft: #55657d;
+  --red: #d7141a;
+  --red-wash: #fbe9ea;
+  --blue: #11457e;
+  --font: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0e1626;
+    --sheet: #162138;
+    --rule: #2b3b5a;
+    --rule-strong: #e8eef7;
+    --ink: #e8eef7;
+    --ink-soft: #a7b4ca;
+    --red: #ff5f63;
+    --red-wash: #3a1b22;
+    --blue: #8fbcff;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  padding: 0 16px 40px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.45;
+  font-variation-settings: 'wdth' 100;
+  font-variant-numeric: tabular-nums;
+}
+
+a { color: var(--blue); }
+
+abbr[title] { text-decoration: none; }
+
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+/* Masthead ---------------------------------------------------------- */
+
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 28px 0 14px;
+  border-bottom: 3px solid var(--rule-strong);
+}
+
+.masthead h1 {
+  margin: 0;
+  font-size: clamp(40px, 7vw, 64px);
+  font-weight: 800;
+  font-variation-settings: 'wdth' 62;
+  letter-spacing: -0.01em;
+  line-height: 0.92;
+}
+
+.masthead__sub {
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+  font-size: 15px;
+}
+
+.days {
+  display: flex;
+  gap: 4px;
+}
+
+.day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 52px;
+  padding: 6px 8px 2px;
+  border-bottom: 4px solid transparent;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 36px;
+  font-weight: 700;
+  font-variation-settings: 'wdth' 62;
+  line-height: 1;
+}
+
+.day__label {
+  font-size: 11px;
+  font-weight: 500;
+  font-variation-settings: 'wdth' 100;
+  color: var(--ink-soft);
+  margin-bottom: 2px;
+}
+
+.day.is-future { color: var(--ink-soft); opacity: 0.55; }
+.day:hover { border-bottom-color: var(--rule); }
+.day.is-current { color: var(--red); border-bottom-color: var(--red); opacity: 1; }
+.day.is-current .day__label { color: var(--red); }
+
+/* Status ------------------------------------------------------------ */
+
+.status {
+  max-width: 1400px;
+  margin: 10px auto 22px;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+.status[data-tone='warn'] { color: var(--red); }
+
+/* Groups and table -------------------------------------------------- */
+
+main { max-width: 1400px; margin: 0 auto; }
+
+.group + .group { margin-top: 40px; }
+
+.group__title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 10px;
+  font-size: 24px;
+  font-weight: 700;
+  font-variation-settings: 'wdth' 75;
+  line-height: 1.1;
+}
+
+.group__count {
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 400;
+  font-variation-settings: 'wdth' 100;
+}
+
+.empty {
+  margin: 0;
+  padding: 18px 0;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-soft);
+}
+
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sheet {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.sheet th,
+.sheet td {
+  padding: 8px 10px;
+  vertical-align: top;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.sheet thead th {
+  border-bottom: 2px solid var(--rule-strong);
+  padding-bottom: 6px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.sheet tbody tr { border-bottom: 1px solid var(--rule); }
+.sheet tbody tr:last-child { border-bottom: 2px solid var(--rule-strong); }
+
+.sheet .c-rider,
+.sheet .c-cls,
+.sheet .c-day,
+.sheet .c-overall { text-align: left; }
+
+.sheet thead .c-test { text-align: right; }
+
+.test-code { display: block; }
+.test-name {
+  display: block;
+  color: var(--ink-soft);
+  font-weight: 400;
+  font-size: 11px;
+}
+
+/* sticky first columns so phones can scroll the tests */
+.sheet .c-pos,
+.sheet .c-rider {
+  position: sticky;
+  background: var(--paper);
+  z-index: 1;
+}
+.sheet .c-pos { left: 0; min-width: 56px; }
+.sheet .c-rider { left: 56px; }
+.sheet .c-rider::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 1px;
+  background: var(--rule);
+}
+
+.sheet .c-pos .pos,
+.sheet .c-overall .pos {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+  font-variation-settings: 'wdth' 68;
+  line-height: 1;
+  margin-bottom: 3px;
+}
+
+.sheet .c-overall .pos { display: inline-block; margin-right: 8px; vertical-align: -2px; }
+
+.sheet .num {
+  display: inline-block;
+  min-width: 2.4em;
+  margin-right: 6px;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.sheet .name { font-weight: 600; }
+
+.sheet .t { display: block; }
+
+.sheet .sub {
+  display: block;
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  line-height: 1.3;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+.sheet .c-rider .sub { white-space: normal; max-width: 260px; }
+
+.sheet .c-test.is-best { background: var(--red-wash); }
+.sheet .c-test.is-best .t { color: var(--red); font-weight: 700; }
+
+.sheet .c-day .t { font-weight: 600; }
+
+.muted { color: var(--ink-soft); }
+
+.sheet tr.is-ns td,
+.sheet tr.is-out td { color: var(--ink-soft); }
+.sheet tr.is-out .name { text-decoration: line-through; text-decoration-thickness: 1px; }
+.sheet tr.is-ns .name,
+.sheet tr.is-out .name { color: var(--ink-soft); }
+
+/* Legend ------------------------------------------------------------ */
+
+.legend {
+  max-width: 1400px;
+  margin: 36px auto 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  max-width: 78ch;
+}
+
+.legend p { margin: 0 0 8px; }
+
+/* Small screens ----------------------------------------------------- */
+
+@media (max-width: 640px) {
+  .masthead { padding-top: 18px; }
+  .days { width: 100%; justify-content: space-between; }
+  .day { min-width: 0; flex: 1; font-size: 30px; }
+  .sheet th, .sheet td { padding: 7px 7px; }
+  .sheet .c-pos { min-width: 48px; }
+  .sheet .c-rider { left: 48px; }
+  .sheet .c-rider .sub { max-width: 170px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { scroll-behavior: auto !important; }
+}
