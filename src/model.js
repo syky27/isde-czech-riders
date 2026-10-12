@@ -127,6 +127,7 @@ export function dayRows(rp, { teams = {}, nation = NATION } = {}) {
       dayPos: started ? toInt(r.LastPsP) : null,
       dayTime: started ? r.Tempo ?? '' : '',
       dayGap: started ? r.Dist ?? '' : '',
+      startTime: r['Start Time'] ?? '',
     });
   });
   return rows;
@@ -322,4 +323,71 @@ export function teamsOfNation(standings, nation) {
     }
   }
   return out;
+}
+
+// ---- Rider detail ------------------------------------------------------
+
+/**
+ * Everything the per-rider feed (resultconc) knows about one rider:
+ * tests per day with time, position in the test and standing after it,
+ * the day standing (after the last finished test) and the cumulative overall.
+ */
+export function riderDetail(feed) {
+  const driver = feed?.data?.driver;
+  if (!driver) return null;
+  const list = feed.data.list_ps ?? [];
+  const testCodes = [];
+  const byDay = new Map();
+  for (const ps of list) {
+    if (ps.StageCode && !testCodes.includes(ps.StageCode)) testCodes.push(ps.StageCode);
+    const day = toInt(ps.Day);
+    if (day == null) continue;
+    if (!byDay.has(day)) byDay.set(day, { day, tests: {}, lastCode: null, last: null });
+    const entry = byDay.get(day);
+    const time = ps.cps?.Tempo;
+    if (!time || parseTime(time) == null) {
+      entry.tests[ps.StageCode] = null;
+      continue;
+    }
+    entry.tests[ps.StageCode] = {
+      time,
+      pos: toInt(ps.cps.Pos),
+      afterPos: toInt(ps.rps?.Pos),
+      afterTime: ps.rps?.Tempo ?? '',
+    };
+    entry.lastCode = ps.StageCode;
+    entry.last = ps.rps ?? {};
+  }
+  const overallByDay = {};
+  for (const d of feed.data.days ?? []) {
+    if (d?.rtp?.Tempo) overallByDay[(toInt(d.giornata) ?? 0) + 1] = { pos: toInt(d.rtp.Pos), time: d.rtp.Tempo };
+  }
+  const days = [...byDay.values()]
+    .filter((d) => d.lastCode)
+    .sort((a, b) => a.day - b.day)
+    .map((d) => {
+      for (const code of testCodes) if (!(code in d.tests)) d.tests[code] = null;
+      const overall = overallByDay[d.day] ?? (d.day === 1 ? { pos: toInt(d.last.Pos), time: d.last.Tempo ?? '' } : null);
+      return {
+        day: d.day,
+        tests: d.tests,
+        lastCode: d.lastCode,
+        dayTime: d.last.Tempo ?? '',
+        dayPos: toInt(d.last.Pos),
+        dayGap: d.last.Dist ?? '',
+        timeControl: d.last.Penco ?? '',
+        penalty: d.last.Pen ?? '',
+        overall,
+      };
+    });
+  return {
+    num: driver.Numero,
+    name: driver.CognomeNome,
+    nation: driver.Naz ?? '',
+    bike: driver.Moto ?? '',
+    cls: driver.classe ?? '',
+    cat: driver.q ?? '',
+    testCodes,
+    days,
+  };
 }

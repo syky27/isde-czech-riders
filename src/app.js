@@ -16,6 +16,7 @@ import {
   stageCounts,
   defaultStage,
   teamsOfNation,
+  riderDetail,
 } from './model.js';
 import { nationName } from './nations.js';
 import {
@@ -26,6 +27,8 @@ import {
   renderStatus,
   renderNation,
   renderTitle,
+  renderRider,
+  renderPdfLinks,
   hashFor,
 } from './render.js';
 
@@ -36,7 +39,8 @@ const RETRY_MS = 60_000;
 const lang = navigator.language || 'en';
 
 const state = {
-  view: 'riders', // 'riders' | 'teams'
+  view: 'riders', // 'riders' | 'teams' | 'rider'
+  listView: 'riders', // the last list view, where the rider page's back link goes
   nation: DEFAULT_NATION,
   day: 1,
   latestDay: 1,
@@ -49,6 +53,9 @@ const state = {
   teamFeeds: {}, // cod → day → test code → team-clasps feed
   teamStage: {}, // team category → test code chosen by the viewer (reset per day)
   overall: {}, // cod → num → cumulative standing
+  rider: null, // { cod, num } of the rider panel, or null
+  riderFeed: null, // { key, feed } for the open rider
+  riderError: null,
   updatedAt: null,
   error: null,
   loading: true,
@@ -61,19 +68,34 @@ const els = {
   days: document.getElementById('days'),
   status: document.getElementById('status'),
   main: document.getElementById('main'),
+  pdf: document.getElementById('pdf-links'),
   legendRiders: document.getElementById('legend-riders'),
   legendTeams: document.getElementById('legend-teams'),
+  legendRider: document.getElementById('legend-rider'),
 };
 
 function parseHash() {
   const params = new URLSearchParams(location.hash.replace(/^#/, ''));
   const nation = (params.get('nation') ?? '').toUpperCase();
   const day = Number(params.get('day'));
+  const riderMatch = /^(ISDE\d+)-(\d+)$/.exec(params.get('rider') ?? '');
+  const rider = riderMatch ? { cod: riderMatch[1], num: riderMatch[2] } : null;
+  const requested = params.get('view');
+  const view = requested === 'rider' && rider ? 'rider' : requested === 'teams' ? 'teams' : 'riders';
   return {
-    view: params.get('view') === 'teams' ? 'teams' : 'riders',
+    view,
     nation: nation || null,
     day: Number.isInteger(day) && day >= 1 && day <= 6 ? day : null,
+    rider: view === 'rider' ? rider : null,
   };
+}
+
+const riderKey = (r) => (r ? `${r.cod}-${r.num}` : null);
+const riderHref = (cod, num) => hashFor(state.nation, state.day, 'rider', `${cod}-${num}`);
+
+function dayState() {
+  if (state.day > state.latestDay) return 'future';
+  return GROUPS.every((g) => dayComplete(state.programs[g.cod], state.day)) ? 'final' : 'live';
 }
 
 const options = () => nationOptions(GROUPS.map((g) => ({ data: { iscritti: state.entries[g.cod] ?? [] } })));
@@ -119,6 +141,7 @@ function paintRiders(nationLabel) {
       ranks[row.num] = rankCache[row.lastPs][row.num];
     }
     return {
+      cod: g.cod,
       label: g.label,
       day: state.day,
       loaded: Boolean(feed),
@@ -131,7 +154,7 @@ function paintRiders(nationLabel) {
       ranks,
     };
   });
-  renderGroups(els.main, groups, { showOverall, showFlags: state.nation === ALL, nationLabel });
+  renderGroups(els.main, groups, { showOverall, showFlags: state.nation === ALL, nationLabel, riderHref });
   return {
     hasData: groups.some((g) => g.loaded),
     note: showOverall ? '' : 'Cumulative standings are shown per nation.',
@@ -166,6 +189,8 @@ function paintTeams(nationLabel) {
     sections.push({
       type,
       name,
+      cod: found.cod,
+      retired: retiredMap(state.dayClass[found.cod]?.[state.day]),
       max: found.max,
       rows,
       stages: found.counts.map((c) => ({ code: c.code, name: nameByCode[c.code] ?? c.code, count: c.count, selected: c.code === selectedCode })),
@@ -173,25 +198,73 @@ function paintTeams(nationLabel) {
   }
   const typeName = Object.fromEntries(TEAM_TYPES.map((t) => [t.code, t.name]));
   const summary = teamsOfNation(selectedStandings, state.nation).map((t) => ({ ...t, typeName: typeName[t.type], stage: selectedStage[t.type] }));
-  renderTeams(els.main, { sections, summary, nation: state.nation, nationLabel, day: state.day, loaded });
+  renderTeams(els.main, { sections, summary, nation: state.nation, nationLabel, day: state.day, loaded, riderHref });
   return { hasData: loaded, note: '' };
 }
 
 function paint() {
   const nationLabel = state.nation === ALL ? 'all nations' : nationName(state.nation, lang);
 
+  const riderPage = state.view === 'rider';
   renderTitle(els.title, { nation: state.nation, lang });
   renderNation(els.nation, { options: options(), selected: state.nation, lang });
   renderViews(els.views, { view: state.view, nation: state.nation, day: state.day });
   renderDays(els.days, { day: state.day, latestDay: state.latestDay, nation: state.nation, view: state.view });
+  els.nation.closest('.nation').hidden = riderPage;
+  els.days.hidden = riderPage;
 
-  const { hasData, note } = state.view === 'teams' ? paintTeams(nationLabel) : paintRiders(nationLabel);
+  const { hasData, note } = riderPage ? paintRiderPage() : state.view === 'teams' ? paintTeams(nationLabel) : paintRiders(nationLabel);
   els.legendRiders.hidden = state.view !== 'riders';
   els.legendTeams.hidden = state.view !== 'teams';
+  els.legendRider.hidden = !riderPage;
 
-  renderStatus(els.status, { loading: state.loading, updatedAt: state.updatedAt, error: state.error, hasData, note });
+  renderStatus(els.status, { loading: state.loading, updatedAt: state.updatedAt, error: state.error, hasData, note, day: state.day, dayState: dayState() });
+  renderPdfLinks(els.pdf, { day: state.day, links: GROUPS.map((g) => ({ label: g.label, href: urls.pdfPage(g.cod, state.day) })) });
   const who = state.nation === ALL ? 'All riders' : nationName(state.nation, lang);
-  document.title = state.view === 'teams' ? `Team standings, ISDE 2026 day ${state.day}` : `${who}, ISDE 2026 day ${state.day}`;
+  if (riderPage) {
+    const detail = state.riderFeed?.key === riderKey(state.rider) ? riderDetail(state.riderFeed.feed) : null;
+    document.title = `${detail ? detail.name : `Rider ${state.rider.num}`}, ISDE 2026`;
+  } else {
+    document.title = state.view === 'teams' ? `Team standings, ISDE 2026 day ${state.day}` : `${who}, ISDE 2026 day ${state.day}`;
+  }
+}
+
+function paintRiderPage() {
+  const key = riderKey(state.rider);
+  const feed = state.riderFeed?.key === key ? state.riderFeed.feed : null;
+  const detail = feed ? riderDetail(feed) : null;
+  const team = detail ? state.teams[state.rider.cod]?.[detail.num]?.team ?? '' : '';
+  // Out-of-race note from any loaded day of the rider's event.
+  const retired = detail
+    ? Object.values(state.dayClass[state.rider.cod] ?? {}).map((cg) => retiredMap(cg)[detail.num]).find(Boolean) ?? ''
+    : '';
+  renderRider(els.main, {
+    detail,
+    team,
+    retired,
+    backHref: hashFor(state.nation, state.day, state.listView),
+    backLabel: state.listView === 'teams' ? 'Back to teams' : 'Back to riders',
+    loading: !feed && !state.riderError,
+    error: state.riderError,
+  });
+  return { hasData: Boolean(feed), note: '' };
+}
+
+async function refreshRider() {
+  const rider = state.rider;
+  if (!rider) return;
+  const key = riderKey(rider);
+  try {
+    const feed = await getJson(urls.rider(rider.cod, rider.num));
+    if (riderKey(state.rider) !== key) return;
+    state.riderFeed = { key, feed };
+    state.riderError = null;
+  } catch (err) {
+    if (riderKey(state.rider) !== key) return;
+    state.riderError = err;
+    console.warn('Rider feed failed', key, err);
+  }
+  if (state.view === 'rider') paint();
 }
 
 let dayToken = 0;
@@ -295,7 +368,16 @@ function validNation(code) {
 }
 
 function applyHash() {
-  const { view, nation, day } = parseHash();
+  const { view, nation, day, rider } = parseHash();
+  const riderChanged = riderKey(rider) !== riderKey(state.rider);
+  state.rider = rider;
+  if (riderChanged) {
+    state.riderError = null;
+    state.riderFeed = null;
+    if (rider) refreshRider();
+  }
+  if (view === 'rider' && state.view !== 'rider') window.scrollTo({ top: 0 });
+  if (view !== 'rider') state.listView = view;
   const nextNation = validNation(nation ?? state.nation);
   const nextDay = day ?? state.day;
   const nationChanged = nextNation !== state.nation;
@@ -313,6 +395,8 @@ async function init() {
   const initial = parseHash();
   state.nation = initial.nation ?? DEFAULT_NATION;
   state.view = initial.view;
+  state.rider = initial.rider;
+  if (initial.view !== 'rider') state.listView = initial.view;
   paint();
   try {
     await loadStatic();
@@ -330,8 +414,10 @@ async function init() {
 
   await refreshDay();
   refreshOverall();
+  refreshRider();
 
   setInterval(refreshDay, DAY_REFRESH_MS);
+  setInterval(refreshRider, DAY_REFRESH_MS);
   setInterval(refreshOverall, OVERALL_REFRESH_MS);
   window.addEventListener('hashchange', applyHash);
   els.nation.addEventListener('change', () => {

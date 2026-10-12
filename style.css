@@ -388,6 +388,57 @@ main { max-width: 1400px; margin: 0 auto; }
   .sheet .c-rider .sub { max-width: 170px; }
 }
 
+/* Rider panel ------------------------------------------------------- */
+
+.rider-panel { padding: 4px 0 6px; }
+
+.rider-panel__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.rider-panel__name {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 700;
+  font-variation-settings: 'wdth' 75;
+  line-height: 1.1;
+}
+
+.rider-panel__name .num { font-size: 18px; }
+.rider-panel__meta { margin: 4px 0 0; color: var(--ink-soft); font-size: 14px; }
+.rider-panel__out { margin: 4px 0 0; color: var(--red); font-size: 14px; }
+
+.rider-panel__close {
+  flex: none;
+  padding: 6px 12px;
+  border: 1px solid var(--rule);
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rider-grid .c-dayno { text-align: left; min-width: 48px; }
+.rider-grid .c-dayno .pos { display: block; font-size: 22px; font-weight: 700; font-variation-settings: 'wdth' 68; line-height: 1; }
+.rider-grid .c-day .pos,
+.rider-grid .c-overall .pos { display: inline-block; margin-right: 8px; vertical-align: -2px; }
+.rider-grid .c-day { min-width: 150px; }
+
+.sheet a.name { color: inherit; text-decoration: none; }
+.sheet a.name:hover { text-decoration: underline; color: var(--blue); }
+.sheet .c-team .sub a { color: inherit; }
+.out { color: var(--red); }
+
+/* On wide screens the tables fit, so the header can stick to the viewport. */
+@media (min-width: 1200px) {
+  .table-wrap { overflow: visible; }
+  .sheet thead th { position: sticky; top: 0; background: var(--paper); z-index: 2; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto !important; }
 }

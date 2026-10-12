@@ -4,6 +4,8 @@
 
 export const EVENT = 'ENDUROISDE2026';
 const BASE = `https://apienduro.ficr.it/${EVENT}/END`;
+/** The provider's own results app, used for links to the official PDF documents. */
+export const APP = 'https://enduroisde2026.microplustiming.com';
 
 export const GROUPS = [
   { cod: 'ISDE1', label: 'World Trophy' },
@@ -18,6 +20,7 @@ export const urls = {
   stage: (cod, day, numero) => `${BASE}/mpcache-20/get/plus/clasps/${cod}/${day}/${numero}`,
   rider: (cod, num) => `${BASE}/get/plus/resultconc/${cod}/${num}`,
   teams: (cod, day, numero) => `${BASE}/mpcache-20/get/plus/team-clasps/${cod}/${day}/${numero}`,
+  pdfPage: (cod, day) => `${APP}/#/END/plus/pdf/${cod}/${day}`,
 };
 
 export async function getJson(url) {

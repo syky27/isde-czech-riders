@@ -14,6 +14,10 @@ Deep links: `#nation=GBR&day=2`, `#view=teams&nation=CZE&day=1`. With "All natio
 Overall column is hidden, because it comes from a per-rider feed and fetching it for every rider would
 be too much for the provider.
 
+Clicking a rider's name opens the rider's own page with every test of every day (time, position in
+the test, standing after it), the day standing and the cumulative overall after each day, from the
+per-rider feed. Deep link: `#view=rider&rider=ISDE1-184`.
+
 The Teams view shows the team standings per category (World Trophy, Junior, Women's, Manufacturer's,
 Club, Women's Club, Veteran Club). The provider publishes them after each special test with times
 cumulative across days, and lists a team only once all its riders have finished that test; each

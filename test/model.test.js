@@ -14,6 +14,7 @@ import {
   teamsOfNation,
   surname,
   ordinal,
+  riderDetail,
   parseTime,
   formatTime,
   testColumns,
@@ -99,6 +100,7 @@ test('dayRows keeps only Czech riders with per-test time and position', () => {
   assert.equal(chlum.dayTime, "25'35.82");
   assert.equal(chlum.dayGap, "2'50.84");
   assert.equal(chlum.started, true);
+  assert.equal(chlum.startTime, '8:40');
 });
 
 test('rankWithin derives category and class positions from a stage classification', () => {
@@ -313,4 +315,47 @@ test('surname and ordinal helpers', () => {
   assert.deepEqual([1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 101, 112].map(ordinal), [
     '1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd', '23rd', '101st', '112th',
   ]);
+});
+
+test('riderDetail lays out every day and test of a rider with day and overall standings', () => {
+  const d = riderDetail(rc33);
+  assert.equal(d.num, '33');
+  assert.equal(d.name, 'GARCIA Josep');
+  assert.equal(d.nation, 'ESP');
+  assert.equal(d.bike, 'KTM 250 4T');
+  assert.equal(d.cls, 'E1');
+  assert.equal(d.cat, 'WT');
+  assert.deepEqual(d.testCodes, ['ST1', 'ST2', 'ST3', 'ST4', 'ST5', 'ST6', 'ST7', 'MX']);
+  assert.equal(d.days.length, 6);
+  const day1 = d.days[0];
+  assert.equal(day1.day, 1);
+  assert.deepEqual(day1.tests.ST1, { time: "6'15.20", pos: 3, afterPos: 3, afterTime: "6'15.20" });
+  assert.deepEqual(day1.tests.ST6, { time: "4'14.95", pos: 47, afterPos: 1, afterTime: "32'19.21" });
+  assert.equal(day1.dayTime, "32'19.21");
+  assert.equal(day1.dayPos, 1);
+  assert.equal(day1.timeControl, '');
+  assert.deepEqual(day1.overall, { pos: 1, time: "32'19.21" });
+  const day2 = d.days[1];
+  assert.equal(day2.dayTime, "30'08.54");
+  assert.deepEqual(day2.overall, { pos: 1, time: "1:02'27.75" });
+  const day5 = d.days[4];
+  assert.equal(day5.tests.ST1, null);
+  assert.equal(day5.tests.ST2.time, "4'12.13");
+  const day6 = d.days[5];
+  assert.deepEqual(Object.keys(day6.tests).filter((c) => day6.tests[c]), ['MX']);
+  assert.equal(day6.tests.MX.pos, 10);
+  assert.deepEqual(day6.overall, { pos: 1, time: "2:51'44.78" });
+});
+
+test('riderDetail on a day in progress uses the last finished test as the day standing', () => {
+  const d = riderDetail(rc184);
+  assert.equal(d.days.length, 1);
+  const day1 = d.days[0];
+  assert.equal(day1.lastCode, 'ST3');
+  assert.equal(day1.dayTime, "25'35.82");
+  assert.equal(day1.dayPos, 74);
+  assert.equal(day1.tests.ST4, null);
+  assert.deepEqual(day1.overall, { pos: 74, time: "25'35.82" });
+  assert.equal(riderDetail(null), null);
+  assert.equal(riderDetail({ data: {} }), null);
 });
