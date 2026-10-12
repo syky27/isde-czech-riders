@@ -59,7 +59,7 @@ Base URL: `https://apienduro.ficr.it/ENDUROISDE2026/END/`
 | `mpcache-20/get/plus/program/{cod}` | which days have started, which are finished |
 | `mpcache-20/get/plus/risultatiprove/{cod}/{day}` | per-test times and positions, day time, day position |
 | `mpcache-20/get/plus/clasgiornata/{cod}/{day}` | riders out of the race |
-| `mpcache-20/get/plus/clasps/{cod}/{day}/{test}` | standing after a test, for positions within category |
+| `mpcache-20/get/plus/clasps/{cod}/{day}/{test}` | standing after a test, for positions within category and penalties |
 | `get/plus/resultconc/{cod}/{number}` | cumulative overall standing (one call per Czech rider) |
 
 `ISDE1` is the World Trophy event (World, Junior and Women's Trophy), `ISDE2` the Club teams event.

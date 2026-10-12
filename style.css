@@ -252,6 +252,7 @@ main { max-width: 1400px; margin: 0 auto; }
 .sheet .c-test.is-best .t { color: var(--red); font-weight: 700; }
 
 .sheet .c-day .t { font-weight: 600; }
+.sheet .sub.pen { color: var(--red); }
 
 .muted { color: var(--ink-soft); }
 

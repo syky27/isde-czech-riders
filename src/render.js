@@ -90,7 +90,11 @@ function rowHtml(row, cols, best, retired, overall, rank) {
     dayCell = `<td class="c-day"><span class="muted">Not started yet</span></td>`;
   } else {
     const gap = row.dayGap ? `+${esc(row.dayGap)}` : 'leader';
-    dayCell = `<td class="c-day"><span class="t">${esc(row.dayTime)}</span><span class="sub">${gap}</span></td>`;
+    const penalties = [
+      rank?.timeControl ? `<span class="sub pen">incl. ${esc(rank.timeControl)} time control</span>` : '',
+      rank?.penalty ? `<span class="sub pen">incl. ${esc(rank.penalty)} penalty</span>` : '',
+    ].join('');
+    dayCell = `<td class="c-day"><span class="t">${esc(row.dayTime)}</span>${penalties}<span class="sub">${gap}</span></td>`;
   }
 
   return `<tr class="${classes}">${posCell}${riderCell}<td class="c-cls">${esc(row.cls)}</td>${testCells}${dayCell}${overallCell(overall)}</tr>`;

@@ -119,8 +119,10 @@ export function dayRows(rp, { teams = {}, nation = NATION } = {}) {
 /**
  * Positions within category (q) and class from a stage classification feed
  * (clasps → data.rps, the overall standing after that special test).
- * Returns race number → { pos, fieldSize, catPos, catSize, classPos, classSize }
- * for riders of the given nation.
+ * Returns race number → { pos, fieldSize, catPos, catSize, classPos, classSize,
+ * timeControl, penalty } for riders of the given nation. timeControl is the
+ * time-control (lateness) penalty already included in the day time; penalty
+ * is any other penalty, both as time strings or ''.
  */
 export function rankWithin(clasps, { nation = NATION } = {}) {
   const list = (clasps?.data?.rps ?? [])
@@ -147,6 +149,8 @@ export function rankWithin(clasps, { nation = NATION } = {}) {
       catSize: catSize[r.q],
       classPos: cls[r.classe],
       classSize: classSize[r.classe],
+      timeControl: r.Penco ?? '',
+      penalty: r.Pen ?? '',
     };
   }
   return out;

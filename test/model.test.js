@@ -28,6 +28,7 @@ const entry1 = fixture('entrylist_ISDE1.json');
 const entry2 = fixture('entrylist_ISDE2.json');
 const cg1 = fixture('clasgiornata_ISDE1_1.json');
 const clasps1 = fixture('clasps_ISDE1_1_15.json');
+const clasps2 = fixture('clasps_ISDE2_1_15.json');
 const program26 = fixture('program_ISDE1.json');
 const program25 = fixture('program_2025_ISDE1.json');
 const rc33 = fixture('resultconc_2025_ISDE1_33.json');
@@ -90,9 +91,10 @@ test('dayRows keeps only Czech riders with per-test time and position', () => {
 test('rankWithin derives category and class positions from a stage classification', () => {
   const ranks = rankWithin(clasps1);
   assert.deepEqual(Object.keys(ranks).sort(), ['184', '185', '186']);
-  assert.deepEqual(ranks['185'], { pos: 64, fieldSize: 102, catPos: 26, catSize: 35, classPos: 30, classSize: 49 });
-  assert.deepEqual(ranks['186'], { pos: 66, fieldSize: 102, catPos: 28, catSize: 35, classPos: 21, classSize: 30 });
-  assert.deepEqual(ranks['184'], { pos: 74, fieldSize: 102, catPos: 31, catSize: 35, classPos: 36, classSize: 49 });
+  const noPen = { timeControl: '', penalty: '' };
+  assert.deepEqual(ranks['185'], { pos: 64, fieldSize: 102, catPos: 26, catSize: 35, classPos: 30, classSize: 49, ...noPen });
+  assert.deepEqual(ranks['186'], { pos: 66, fieldSize: 102, catPos: 28, catSize: 35, classPos: 21, classSize: 30, ...noPen });
+  assert.deepEqual(ranks['184'], { pos: 74, fieldSize: 102, catPos: 31, catSize: 35, classPos: 36, classSize: 49, ...noPen });
   assert.deepEqual(rankWithin(null), {});
   assert.deepEqual(rankWithin({ data: {} }), {});
 });
@@ -159,4 +161,22 @@ test('dayComplete is true only when every special test of the day is finished', 
   assert.equal(dayComplete(program25, 6), true);
   assert.equal(dayComplete(program25, 1), true);
   assert.equal(dayComplete({ data: [] }, 1), false);
+});
+
+test('rankWithin carries time-control and other penalties from the standing', () => {
+  const ranks = rankWithin(clasps2);
+  assert.equal(ranks['401'].timeControl, "4'00");
+  assert.equal(ranks['501'].timeControl, "6'00");
+  assert.equal(ranks['404'].timeControl, "2'00");
+  assert.equal(ranks['401'].penalty, '');
+  assert.deepEqual(ranks['492'], {
+    pos: 42,
+    fieldSize: 107,
+    catPos: 1,
+    catSize: 9,
+    classPos: 34,
+    classSize: 91,
+    timeControl: '',
+    penalty: '',
+  });
 });

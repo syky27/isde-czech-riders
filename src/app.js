@@ -137,10 +137,19 @@ async function refreshDay() {
   paint();
 }
 
+/** Czech race numbers of a group: from the entry list, else from the latest day's results. */
+function czechNumbers(cod) {
+  if (state.riders[cod]?.length) return state.riders[cod];
+  const feed = state.tests[cod]?.[state.latestDay];
+  return feed ? dayRows(feed, { nation: NATION }).map((r) => r.num) : [];
+}
+
 async function refreshOverall() {
   await Promise.all(
     GROUPS.map(async (g) => {
-      const nums = state.riders[g.cod] ?? [];
+      // The entry list occasionally comes back empty; retry it until it has riders.
+      if (!state.riders[g.cod]?.length) await loadEntry(g.cod).catch((err) => console.warn('Entry list failed', g.cod, err));
+      const nums = czechNumbers(g.cod);
       const settled = await Promise.allSettled(nums.map((n) => getJson(urls.rider(g.cod, n))));
       settled.forEach((res, i) => {
         if (res.status === 'fulfilled') {
@@ -152,13 +161,24 @@ async function refreshOverall() {
   paint();
 }
 
+/** Team names and the Czech rider list; kept only when the feed actually has riders. */
+async function loadEntry(cod) {
+  const entry = await getJson(urls.entrylist(cod));
+  const riders = entry?.data?.iscritti ?? [];
+  if (!riders.length) return;
+  state.teams[cod] = teamsByNumber(entry);
+  state.riders[cod] = riders.filter((r) => r.naz === NATION).map((r) => r.id);
+}
+
+/** Programs are required; entry lists are optional (team names, overall standings). */
 async function loadStatic() {
   await Promise.all(
     GROUPS.map(async (g) => {
-      const [program, entry] = await Promise.all([getJson(urls.program(g.cod)), getJson(urls.entrylist(g.cod))]);
+      const [program] = await Promise.all([
+        getJson(urls.program(g.cod)),
+        loadEntry(g.cod).catch((err) => console.warn('Entry list failed', g.cod, err)),
+      ]);
       state.programs[g.cod] = program;
-      state.teams[g.cod] = teamsByNumber(entry);
-      state.riders[g.cod] = (entry?.data?.iscritti ?? []).filter((r) => r.naz === NATION).map((r) => r.id);
     }),
   );
 }
