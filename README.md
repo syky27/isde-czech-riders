@@ -1,6 +1,6 @@
 # Czech riders at ISDE 2026
 
-A single static page that shows, for every Czech rider at the FIM International Six Days Enduro 2026 (Portugal):
+A single static page that shows, for the riders of one nation (Czech by default, any nation selectable, or everyone) at the FIM International Six Days Enduro 2026 (Portugal):
 
 - the time and position in each special test of the selected day,
 - the day time, gap and position in the day classification,
@@ -10,12 +10,16 @@ It reads the same live JSON feeds (Microplus / FICR timing) that power the resul
 <https://www.fim-6days.com/info/results>, directly from the browser. No build step, no server code,
 no dependencies.
 
+Deep links: `#nation=GBR&day=2`. With "All nations" the cumulative Overall column is hidden, because
+it comes from a per-rider feed and fetching it for every rider would be too much for the provider.
+
 ## Files
 
 | Path | Purpose |
 | --- | --- |
 | `index.html`, `style.css` | the page |
 | `src/api.js` | feed URLs (change `EVENT` for another edition) |
+| `src/nations.js` | nation codes → names and flags |
 | `src/model.js` | pure data transformations, unit-tested |
 | `src/render.js` | HTML rendering |
 | `src/app.js` | loading, refresh loop, day switching |
@@ -60,7 +64,7 @@ Base URL: `https://apienduro.ficr.it/ENDUROISDE2026/END/`
 | `mpcache-20/get/plus/risultatiprove/{cod}/{day}` | per-test times and positions, day time, day position |
 | `mpcache-20/get/plus/clasgiornata/{cod}/{day}` | riders out of the race |
 | `mpcache-20/get/plus/clasps/{cod}/{day}/{test}` | standing after a test, for positions within category and penalties |
-| `get/plus/resultconc/{cod}/{number}` | cumulative overall standing (one call per Czech rider) |
+| `get/plus/resultconc/{cod}/{number}` | cumulative overall standing (one call per shown rider) |
 
 `ISDE1` is the World Trophy event (World, Junior and Women's Trophy), `ISDE2` the Club teams event.
 

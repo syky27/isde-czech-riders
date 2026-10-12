@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import {
+  ALL,
+  nationOptions,
   parseTime,
   formatTime,
   testColumns,
@@ -17,6 +19,7 @@ import {
   dayComplete,
   teamsByNumber,
 } from '../src/model.js';
+import { isoCode, nationName, nationFlag } from '../src/nations.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name) => JSON.parse(readFileSync(join(here, 'fixtures', name), 'utf8'));
@@ -179,4 +182,36 @@ test('rankWithin carries time-control and other penalties from the standing', ()
     timeControl: '',
     penalty: '',
   });
+});
+
+test('dayRows and rankWithin return every rider when nation is ALL', () => {
+  assert.equal(dayRows(rp1, { nation: ALL }).length, rp1.data.result.length);
+  assert.equal(Object.keys(rankWithin(clasps1, { nation: ALL })).length, 102);
+});
+
+test('nationOptions counts riders per nation across entry lists', () => {
+  const options = nationOptions([entry1, entry2]);
+  const cze = options.find((o) => o.code === 'CZE');
+  assert.deepEqual(cze, { code: 'CZE', count: 23 });
+  const total = options.reduce((sum, o) => sum + o.count, 0);
+  assert.equal(total, entry1.data.iscritti.length + entry2.data.iscritti.length);
+  assert.deepEqual(
+    options.map((o) => o.code),
+    [...options.map((o) => o.code)].sort(),
+  );
+  assert.ok(options.every((o) => o.code && o.count > 0));
+  assert.deepEqual(nationOptions([null, { data: {} }]), []);
+});
+
+test('nations map the timing codes to names and flags', () => {
+  assert.equal(nationName('CZE', 'en'), 'Czechia');
+  assert.equal(nationName('GBR', 'en'), 'United Kingdom');
+  assert.equal(nationName('CHI', 'en'), 'Chile');
+  assert.equal(nationName('CZE', 'cs'), 'Česko');
+  assert.equal(nationName('ZZZ', 'en'), 'ZZZ');
+  assert.equal(nationFlag('CZE'), '🇨🇿');
+  assert.equal(nationFlag('ZZZ'), '');
+  const codes = new Set([...entry1.data.iscritti, ...entry2.data.iscritti].map((r) => r.naz));
+  const unmapped = [...codes].filter((c) => !isoCode(c));
+  assert.deepEqual(unmapped, []);
 });

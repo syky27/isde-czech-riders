@@ -3,6 +3,9 @@
 
 const NATION = 'CZE';
 
+/** Pass as `nation` to select every rider. */
+export const ALL = 'ALL';
+
 /** "1:02'27.75" | "7'20.89" | "55.42" → seconds (number) or null when missing. */
 export function parseTime(value) {
   if (value == null) return null;
@@ -51,6 +54,19 @@ export function teamsByNumber(entry) {
   return out;
 }
 
+/** Nations present in the entry lists, as [{ code, count }] sorted by code. */
+export function nationOptions(entries) {
+  const counts = {};
+  for (const entry of entries ?? []) {
+    for (const rider of entry?.data?.iscritti ?? []) {
+      if (rider.naz) counts[rider.naz] = (counts[rider.naz] ?? 0) + 1;
+    }
+  }
+  return Object.keys(counts)
+    .sort()
+    .map((code) => ({ code, count: counts[code] }));
+}
+
 /** Last day (1–6) that has at least one special test started, from the program feed. */
 export function latestDay(program) {
   let day = 1;
@@ -81,7 +97,7 @@ export function dayRows(rp, { teams = {}, nation = NATION } = {}) {
   const cols = testColumns(rp);
   const rows = [];
   all.forEach((r) => {
-    if (r.Naz !== nation) return;
+    if (nation !== ALL && r.Naz !== nation) return;
 
     const tests = {};
     let testsDone = 0;
@@ -141,7 +157,7 @@ export function rankWithin(clasps, { nation = NATION } = {}) {
   for (const r of list) {
     cat[r.q] = (cat[r.q] ?? 0) + 1;
     cls[r.classe] = (cls[r.classe] ?? 0) + 1;
-    if (r.Naz !== nation) continue;
+    if (nation !== ALL && r.Naz !== nation) continue;
     out[r.Numero] = {
       pos: r.posNum,
       fieldSize: list.length,
