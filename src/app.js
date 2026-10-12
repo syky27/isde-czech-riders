@@ -1,6 +1,7 @@
 import { GROUPS, urls, getJson } from './api.js';
 import {
   ALL,
+  TEAM_TYPES,
   latestDay,
   dayComplete,
   teamsByNumber,
@@ -11,9 +12,22 @@ import {
   rankWithin,
   overallFromDays,
   nationOptions,
+  teamStandings,
+  stageCounts,
+  defaultStage,
+  teamsOfNation,
 } from './model.js';
 import { nationName } from './nations.js';
-import { renderDays, renderGroups, renderStatus, renderNation, renderTitle, hashFor } from './render.js';
+import {
+  renderDays,
+  renderViews,
+  renderGroups,
+  renderTeams,
+  renderStatus,
+  renderNation,
+  renderTitle,
+  hashFor,
+} from './render.js';
 
 const DEFAULT_NATION = 'CZE';
 const DAY_REFRESH_MS = 60_000;
@@ -22,6 +36,7 @@ const RETRY_MS = 60_000;
 const lang = navigator.language || 'en';
 
 const state = {
+  view: 'riders', // 'riders' | 'teams'
   nation: DEFAULT_NATION,
   day: 1,
   latestDay: 1,
@@ -31,6 +46,8 @@ const state = {
   tests: {}, // cod → day → risultatiprove feed
   dayClass: {}, // cod → day → clasgiornata feed
   stageClass: {}, // cod → day → test code → clasps feed (standing after that test)
+  teamFeeds: {}, // cod → day → test code → team-clasps feed
+  teamStage: {}, // team category → test code chosen by the viewer (reset per day)
   overall: {}, // cod → num → cumulative standing
   updatedAt: null,
   error: null,
@@ -40,9 +57,12 @@ const state = {
 const els = {
   title: document.getElementById('title'),
   nation: document.getElementById('nation'),
+  views: document.getElementById('views'),
   days: document.getElementById('days'),
   status: document.getElementById('status'),
   main: document.getElementById('main'),
+  legendRiders: document.getElementById('legend-riders'),
+  legendTeams: document.getElementById('legend-teams'),
 };
 
 function parseHash() {
@@ -50,6 +70,7 @@ function parseHash() {
   const nation = (params.get('nation') ?? '').toUpperCase();
   const day = Number(params.get('day'));
   return {
+    view: params.get('view') === 'teams' ? 'teams' : 'riders',
     nation: nation || null,
     day: Number.isInteger(day) && day >= 1 && day <= 6 ? day : null,
   };
@@ -77,14 +98,8 @@ function overallFor(cod, row, latestRows) {
   return { pos: r.dayPos, time: r.dayTime, afterDay: 1, inProgress: !dayComplete(state.programs[cod], 1) };
 }
 
-function paint() {
+function paintRiders(nationLabel) {
   const showOverall = state.nation !== ALL;
-  const nationLabel = state.nation === ALL ? 'all nations' : nationName(state.nation, lang);
-
-  renderTitle(els.title, { nation: state.nation, lang });
-  renderNation(els.nation, { options: options(), selected: state.nation, lang });
-  renderDays(els.days, { day: state.day, latestDay: state.latestDay, nation: state.nation });
-
   const groups = GROUPS.map((g) => {
     const feed = state.tests[g.cod]?.[state.day];
     const cols = feed ? testColumns(feed) : [];
@@ -117,22 +132,71 @@ function paint() {
     };
   });
   renderGroups(els.main, groups, { showOverall, showFlags: state.nation === ALL, nationLabel });
-
-  const hasData = groups.some((g) => g.loaded);
-  renderStatus(els.status, {
-    loading: state.loading,
-    updatedAt: state.updatedAt,
-    error: state.error,
-    hasData,
+  return {
+    hasData: groups.some((g) => g.loaded),
     note: showOverall ? '' : 'Cumulative standings are shown per nation.',
-  });
+  };
+}
+
+function paintTeams(nationLabel) {
+  const loaded = GROUPS.some((g) => state.teamFeeds[g.cod]?.[state.day]);
+  const sections = [];
+  const selectedStandings = {};
+  const selectedStage = {};
+  for (const { code: type, name } of TEAM_TYPES) {
+    // Each category lives in one of the two events; take the first that has teams of it.
+    let found = null;
+    for (const g of GROUPS) {
+      const feeds = state.teamFeeds[g.cod]?.[state.day];
+      if (!feeds) continue;
+      const counts = stageCounts(feeds, type);
+      const max = Math.max(0, ...counts.map((c) => c.count));
+      if (max) {
+        found = { cod: g.cod, feeds, counts, max };
+        break;
+      }
+    }
+    if (!found) continue;
+    const nameByCode = Object.fromEntries(testColumns(state.tests[found.cod]?.[state.day]).map((c) => [c.code, c.name]));
+    const chosen = state.teamStage[type];
+    const selectedCode = chosen && found.counts.find((c) => c.code === chosen)?.count ? chosen : defaultStage(found.feeds, type);
+    const rows = teamStandings(found.feeds[selectedCode])[type] ?? [];
+    selectedStandings[type] = rows;
+    selectedStage[type] = selectedCode;
+    sections.push({
+      type,
+      name,
+      max: found.max,
+      rows,
+      stages: found.counts.map((c) => ({ code: c.code, name: nameByCode[c.code] ?? c.code, count: c.count, selected: c.code === selectedCode })),
+    });
+  }
+  const typeName = Object.fromEntries(TEAM_TYPES.map((t) => [t.code, t.name]));
+  const summary = teamsOfNation(selectedStandings, state.nation).map((t) => ({ ...t, typeName: typeName[t.type], stage: selectedStage[t.type] }));
+  renderTeams(els.main, { sections, summary, nation: state.nation, nationLabel, day: state.day, loaded });
+  return { hasData: loaded, note: '' };
+}
+
+function paint() {
+  const nationLabel = state.nation === ALL ? 'all nations' : nationName(state.nation, lang);
+
+  renderTitle(els.title, { nation: state.nation, lang });
+  renderNation(els.nation, { options: options(), selected: state.nation, lang });
+  renderViews(els.views, { view: state.view, nation: state.nation, day: state.day });
+  renderDays(els.days, { day: state.day, latestDay: state.latestDay, nation: state.nation, view: state.view });
+
+  const { hasData, note } = state.view === 'teams' ? paintTeams(nationLabel) : paintRiders(nationLabel);
+  els.legendRiders.hidden = state.view !== 'riders';
+  els.legendTeams.hidden = state.view !== 'teams';
+
+  renderStatus(els.status, { loading: state.loading, updatedAt: state.updatedAt, error: state.error, hasData, note });
   const who = state.nation === ALL ? 'All riders' : nationName(state.nation, lang);
-  document.title = `${who}, ISDE 2026 day ${state.day}`;
+  document.title = state.view === 'teams' ? `Team standings, ISDE 2026 day ${state.day}` : `${who}, ISDE 2026 day ${state.day}`;
 }
 
 let dayToken = 0;
 async function refreshDay() {
-  const { day, nation } = state;
+  const { day, nation, view } = state;
   const token = ++dayToken;
   state.loading = true;
   paint();
@@ -141,14 +205,21 @@ async function refreshDay() {
     GROUPS.map(async (g) => {
       const tests = await getJson(urls.tests(g.cod, day));
       const dayClass = await getJson(urls.dayClass(g.cod, day)).catch(() => null);
+      const cols = testColumns(tests);
       // Standing after each test a shown rider has just finished, for category positions and penalties.
-      const numeroByCode = Object.fromEntries(testColumns(tests).map((c) => [c.code, c.numero]));
+      const numeroByCode = Object.fromEntries(cols.map((c) => [c.code, c.numero]));
       const codes = [...new Set(dayRows(tests, { nation }).map((r) => r.lastPs).filter((c) => c && numeroByCode[c]))];
       const stageFeeds = await Promise.all(
         codes.map((code) => getJson(urls.stage(g.cod, day, numeroByCode[code])).catch(() => null)),
       );
       const stageClass = Object.fromEntries(codes.map((code, i) => [code, stageFeeds[i]]).filter(([, feed]) => feed));
-      return { tests, dayClass, stageClass };
+      // Team standings after every test of the day, only while the Teams view is open.
+      let teamFeeds = null;
+      if (view === 'teams') {
+        const feeds = await Promise.all(cols.map((c) => getJson(urls.teams(g.cod, day, c.numero)).catch(() => null)));
+        teamFeeds = Object.fromEntries(cols.map((c, i) => [c.code, feeds[i]]));
+      }
+      return { tests, dayClass, stageClass, teamFeeds };
     }),
   );
   if (token !== dayToken) return; // superseded by a newer request
@@ -161,6 +232,7 @@ async function refreshDay() {
       (state.tests[cod] ??= {})[day] = res.value.tests;
       (state.dayClass[cod] ??= {})[day] = res.value.dayClass;
       (state.stageClass[cod] ??= {})[day] = res.value.stageClass;
+      if (res.value.teamFeeds) (state.teamFeeds[cod] ??= {})[day] = res.value.teamFeeds;
       ok = true;
     } else {
       error = res.reason;
@@ -223,20 +295,24 @@ function validNation(code) {
 }
 
 function applyHash() {
-  const { nation, day } = parseHash();
+  const { view, nation, day } = parseHash();
   const nextNation = validNation(nation ?? state.nation);
   const nextDay = day ?? state.day;
   const nationChanged = nextNation !== state.nation;
   const dayChanged = nextDay !== state.day;
+  const viewChanged = view !== state.view;
   state.nation = nextNation;
   state.day = nextDay;
-  if (dayChanged || nationChanged) refreshDay();
+  state.view = view;
+  if (dayChanged) state.teamStage = {};
+  if (dayChanged || nationChanged || viewChanged) refreshDay();
   if (nationChanged) refreshOverall();
 }
 
 async function init() {
   const initial = parseHash();
   state.nation = initial.nation ?? DEFAULT_NATION;
+  state.view = initial.view;
   paint();
   try {
     await loadStatic();
@@ -259,7 +335,13 @@ async function init() {
   setInterval(refreshOverall, OVERALL_REFRESH_MS);
   window.addEventListener('hashchange', applyHash);
   els.nation.addEventListener('change', () => {
-    location.hash = hashFor(els.nation.value, state.day);
+    location.hash = hashFor(els.nation.value, state.day, state.view);
+  });
+  els.main.addEventListener('click', (event) => {
+    const button = event.target.closest('button.stage');
+    if (!button) return;
+    state.teamStage[button.dataset.type] = button.dataset.code;
+    paint();
   });
 }
 

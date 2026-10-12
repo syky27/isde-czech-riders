@@ -1,6 +1,6 @@
 // HTML rendering. Everything that comes from the timing feed goes through esc().
 
-import { ALL } from './model.js';
+import { ALL, ordinal } from './model.js';
 import { nationName, nationFlag } from './nations.js';
 
 const esc = (value) =>
@@ -27,7 +27,8 @@ function testPlace(name, code) {
 const catLabel = (cat) =>
   CATEGORY_NAMES[cat] ? `<abbr title="${esc(CATEGORY_NAMES[cat])}">${esc(cat)}</abbr>` : esc(cat);
 
-export const hashFor = (nation, day) => `#nation=${encodeURIComponent(nation)}&day=${day}`;
+export const hashFor = (nation, day, view = 'riders') =>
+  `#${view === 'teams' ? 'view=teams&' : ''}nation=${encodeURIComponent(nation)}&day=${day}`;
 
 export function renderTitle(el, { nation, lang }) {
   el.textContent = nation === ALL ? 'All riders' : `${nationFlag(nation)} ${nationName(nation, lang)}`.trim();
@@ -50,12 +51,21 @@ export function renderNation(select, { options, selected, lang }) {
   if (select.value !== selected) select.value = selected;
 }
 
-export function renderDays(container, { day, latestDay, nation }) {
+export function renderDays(container, { day, latestDay, nation, view }) {
   container.innerHTML = [1, 2, 3, 4, 5, 6]
     .map((d) => {
       const classes = ['day', d === day ? 'is-current' : '', d > latestDay ? 'is-future' : ''].filter(Boolean).join(' ');
-      return `<a class="${classes}" href="${hashFor(nation, d)}" aria-current="${d === day ? 'page' : 'false'}"><span class="day__label">Day</span>${d}</a>`;
+      return `<a class="${classes}" href="${hashFor(nation, d, view)}" aria-current="${d === day ? 'page' : 'false'}"><span class="day__label">Day</span>${d}</a>`;
     })
+    .join('');
+}
+
+export function renderViews(container, { view, nation, day }) {
+  container.innerHTML = [
+    ['riders', 'Riders'],
+    ['teams', 'Teams'],
+  ]
+    .map(([v, label]) => `<a class="view${v === view ? ' is-current' : ''}" href="${hashFor(nation, day, v)}" aria-current="${v === view ? 'page' : 'false'}">${label}</a>`)
     .join('');
 }
 
@@ -162,4 +172,58 @@ ${showOverall ? '<th class="c-overall" scope="col">Overall</th>' : ''}
 </table></div></section>`;
     })
     .join('');
+}
+
+const ridersLine = (riders) => riders.map((r) => `${esc(r.name)} ${esc(r.time)}`).join(', ');
+
+function teamSection(section, nation) {
+  const { type, name, stages, max, rows } = section;
+  const selected = stages.find((s) => s.selected);
+  const through = selected && selected.count === max ? `all ${max} teams through` : `${selected?.count ?? 0} of ${max} teams through`;
+  const note = selected ? `After ${esc(selected.code)} ${esc(testPlace(selected.name, selected.code))}, ${through}.` : '';
+  const picker = stages
+    .map(
+      (s) =>
+        `<button type="button" class="stage${s.selected ? ' is-current' : ''}" data-type="${esc(type)}" data-code="${esc(s.code)}" aria-pressed="${s.selected}"${s.count ? '' : ' disabled'}>${esc(s.code)}<span class="stage__count">${s.count}</span></button>`,
+    )
+    .join('');
+  const body = rows
+    .map((r) => {
+      const flag = nationFlag(r.nation);
+      const mine = nation !== ALL && r.nation === nation;
+      return `<tr class="team${mine ? ' is-mine' : ''}"><td class="c-pos"><span class="pos">${r.pos}</span></td><td class="c-team">${flag ? `<span class="flag" title="${esc(r.nation)}">${flag}</span> ` : ''}<span class="name">${esc(r.name)}</span><span class="sub">${ridersLine(r.riders)}</span></td><td class="c-time"><span class="t">${esc(r.time)}</span></td><td class="c-gap">${r.gap ? `+${esc(r.gap)}` : 'leader'}</td></tr>`;
+    })
+    .join('');
+  return `<section class="group">
+<h2 class="group__title">${esc(name)}<span class="group__count">${rows.length} team${rows.length === 1 ? '' : 's'}</span></h2>
+<p class="stage-note">${note}</p>
+<nav class="stages" aria-label="Standing after test">${picker}</nav>
+<div class="table-wrap"><table class="sheet teams">
+<thead><tr><th class="c-pos" scope="col">Pos</th><th class="c-team" scope="col">Team</th><th class="c-time" scope="col">Time</th><th class="c-gap" scope="col">Gap</th></tr></thead>
+<tbody>${body}</tbody>
+</table></div></section>`;
+}
+
+/**
+ * @param {{ sections, summary, nation, nationLabel, day, loaded }} view
+ * sections: [{ type, name, stages: [{ code, name, count, selected }], max, rows }]
+ * summary: [{ typeName, pos, of, name, stage }] — the selected nation's teams
+ */
+export function renderTeams(container, { sections, summary, nation, nationLabel, day, loaded }) {
+  if (!loaded) {
+    container.innerHTML = `<p class="empty">Waiting for the timing server…</p>`;
+    return;
+  }
+  if (!sections.length) {
+    container.innerHTML = `<p class="empty">No team standings for day ${day} yet.</p>`;
+    return;
+  }
+  let summaryHtml = '';
+  if (nation !== ALL) {
+    const items = summary.length
+      ? `<ul class="summary__list">${summary.map((t) => `<li><b>${ordinal(t.pos)}</b> of ${t.of} in ${esc(t.typeName)} after ${esc(t.stage)}: ${esc(t.name)}</li>`).join('')}</ul>`
+      : `<p class="summary__empty">No ${esc(nationLabel)} team listed yet.</p>`;
+    summaryHtml = `<section class="summary"><h2 class="summary__title">${nationFlag(nation)} ${esc(nationLabel)} teams</h2>${items}</section>`;
+  }
+  container.innerHTML = summaryHtml + sections.map((s) => teamSection(s, nation)).join('');
 }

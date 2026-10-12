@@ -19,7 +19,10 @@
     <p class="masthead__sub">Riders at the FIM International Six Days Enduro 2026, Portugal</p>
     <label class="nation"><span class="nation__label">Nation</span><select id="nation" autocomplete="off"><option value="CZE">Czechia</option></select></label>
   </div>
-  <nav class="days" id="days" aria-label="Day of the event"></nav>
+  <div class="masthead__nav">
+    <nav class="views" id="views" aria-label="View"></nav>
+    <nav class="days" id="days" aria-label="Day of the event"></nav>
+  </div>
 </header>
 
 <p class="status" id="status" role="status" aria-live="polite" data-tone="ok">Loading results from the timing server…</p>
@@ -27,7 +30,12 @@
 <main id="main"></main>
 
 <footer class="legend">
+  <div id="legend-teams" hidden>
+    <p>Team times are the sum of the riders' times, cumulative across days, as published after each special test. A team appears in a test's standing once all its riders have finished that test, so each category opens on the latest test every team has completed; the buttons switch to a later test where only some teams are through. Teams of the selected nation are marked in red.</p>
+  </div>
+  <div id="legend-riders">
   <p><b>Pos</b> is the rider's place in the day classification after the last test they have finished, counting every rider in that classification. The line below it is the place within their category in that same classification. <b>Overall</b> is the cumulative standing across days as published by the timing provider. The day time is the sum of the tests plus any time-control penalty, which is listed under the time when a rider has one. Red marks the fastest time in a test among the riders shown. Cumulative standings come from a per-rider feed, so they are shown for one nation at a time. All times are provisional until the official results are published.</p>
+  </div>
   <p>Data: official timing by Microplus and FICR, the same feed behind <a href="https://www.fim-6days.com/info/results">fim-6days.com/info/results</a>.</p>
 </footer>
 

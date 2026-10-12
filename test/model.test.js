@@ -6,7 +6,14 @@ import { dirname, join } from 'node:path';
 
 import {
   ALL,
+  TEAM_TYPES,
   nationOptions,
+  teamStandings,
+  stageCounts,
+  defaultStage,
+  teamsOfNation,
+  surname,
+  ordinal,
   parseTime,
   formatTime,
   testColumns,
@@ -32,6 +39,9 @@ const entry2 = fixture('entrylist_ISDE2.json');
 const cg1 = fixture('clasgiornata_ISDE1_1.json');
 const clasps1 = fixture('clasps_ISDE1_1_15.json');
 const clasps2 = fixture('clasps_ISDE2_1_15.json');
+const teams1 = fixture('teams_ISDE1_1_15.json');
+const teamsClubSt1 = fixture('teams_ISDE2_1_7.json');
+const teamsClubSt3 = fixture('teams_ISDE2_1_15.json');
 const program26 = fixture('program_ISDE1.json');
 const program25 = fixture('program_2025_ISDE1.json');
 const rc33 = fixture('resultconc_2025_ISDE1_33.json');
@@ -214,4 +224,93 @@ test('nations map the timing codes to names and flags', () => {
   const codes = new Set([...entry1.data.iscritti, ...entry2.data.iscritti].map((r) => r.naz));
   const unmapped = [...codes].filter((c) => !isoCode(c));
   assert.deepEqual(unmapped, []);
+});
+
+test('teamStandings ranks teams per category with gaps, nation and riders', () => {
+  const standings = teamStandings(teams1);
+  assert.deepEqual(Object.keys(standings).sort(), ['JW', 'MT', 'WT', 'WW']);
+  assert.equal(standings.JW.length, 14);
+  const leader = standings.JW[0];
+  assert.equal(leader.pos, 1);
+  assert.equal(leader.name, 'TEAM ITALY');
+  assert.equal(leader.nation, 'ITA');
+  assert.equal(leader.time, "1:11'41.91");
+  assert.equal(leader.gap, '');
+  const cze = standings.JW[9];
+  assert.equal(cze.pos, 10);
+  assert.equal(cze.name, 'TEAM CZECH REPUBLIC');
+  assert.equal(cze.nation, 'CZE');
+  assert.equal(cze.time, "1:15'47.97");
+  assert.equal(cze.gap, "4'06.06");
+  assert.deepEqual(
+    cze.riders.map((r) => [r.num, r.name, r.time]),
+    [
+      ['185', 'Kalny', "25'05.05"],
+      ['186', 'Skorepa', "25'07.10"],
+      ['184', 'Chlum', "25'35.82"],
+    ],
+  );
+  assert.deepEqual(teamStandings(null), {});
+  assert.deepEqual(teamStandings({ data: {} }), {});
+});
+
+test('teamStandings takes the majority nation of mixed club teams', () => {
+  const standings = teamStandings(teamsClubSt1);
+  const gottbros = standings.CV.find((t) => t.name === 'GOTTBROS TEAM');
+  assert.equal(gottbros.nation, 'CZE'); // CZE, CZE, SVK
+  const gottbros2 = standings.CT.find((t) => t.name === 'GOTTBROS TEAM 2');
+  assert.equal(gottbros2.nation, 'CZE');
+  const nordbayern = standings.CT.find((t) => t.name.startsWith('TEAM GERMANY NORDBAYERN'));
+  assert.equal(nordbayern.nation, 'DEU');
+});
+
+test('stageCounts and defaultStage pick the latest test every team of the category has finished', () => {
+  const feeds = { ST1: teamsClubSt1, ST2: null, ST3: teamsClubSt3 };
+  assert.deepEqual(stageCounts(feeds, 'CT'), [
+    { code: 'ST1', count: 91 },
+    { code: 'ST2', count: 0 },
+    { code: 'ST3', count: 23 },
+  ]);
+  assert.equal(defaultStage(feeds, 'CT'), 'ST1');
+  assert.equal(defaultStage(feeds, 'CV'), 'ST1');
+  assert.equal(defaultStage(feeds, 'CW'), null);
+  assert.equal(defaultStage({ ST3: teams1 }, 'WT'), 'ST3');
+  assert.equal(defaultStage({}, 'WT'), null);
+});
+
+test('teamsOfNation lists a nation’s teams with their rank per category', () => {
+  const trophy = teamsOfNation(teamStandings(teams1), 'CZE');
+  assert.deepEqual(trophy, [{ type: 'JW', pos: 10, of: 14, name: 'TEAM CZECH REPUBLIC' }]);
+  const club = teamsOfNation(teamStandings(teamsClubSt1), 'CZE');
+  assert.deepEqual(
+    club.map((t) => `${t.type} ${t.pos}/${t.of} ${t.name}`),
+    [
+      'CT 10/91 MOTOSPORT BOZKOV 1',
+      'CT 28/91 AMK ZALANY',
+      'CT 30/91 AUTOMOTOKLUB POLICE NAD M',
+      'CT 38/91 MOTOSPORT BOZKOV 2',
+      'CT 85/91 GOTTBROS TEAM 2',
+      'CV 1/10 TEAM MOTOKROSOVA SKOLA CZ',
+      'CV 2/10 GOTTBROS TEAM',
+    ],
+  );
+  assert.deepEqual(teamsOfNation(teamStandings(teams1), ALL), []);
+});
+
+test('TEAM_TYPES lists the categories in presentation order', () => {
+  assert.deepEqual(
+    TEAM_TYPES.map((t) => t.code),
+    ['WT', 'JW', 'WW', 'MT', 'CT', 'CW', 'CV'],
+  );
+  assert.equal(TEAM_TYPES.find((t) => t.code === 'JW').name, 'Junior World Trophy');
+});
+
+test('surname and ordinal helpers', () => {
+  assert.equal(surname('KALNY Jaroslav'), 'Kalny');
+  assert.equal(surname('LE QUERE Leo'), 'Le Quere');
+  assert.equal(surname('MEJIA LEMOS Mario Alexis'), 'Mejia Lemos');
+  assert.equal(surname(''), '');
+  assert.deepEqual([1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 101, 112].map(ordinal), [
+    '1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd', '23rd', '101st', '112th',
+  ]);
 });

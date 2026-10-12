@@ -10,8 +10,14 @@ It reads the same live JSON feeds (Microplus / FICR timing) that power the resul
 <https://www.fim-6days.com/info/results>, directly from the browser. No build step, no server code,
 no dependencies.
 
-Deep links: `#nation=GBR&day=2`. With "All nations" the cumulative Overall column is hidden, because
-it comes from a per-rider feed and fetching it for every rider would be too much for the provider.
+Deep links: `#nation=GBR&day=2`, `#view=teams&nation=CZE&day=1`. With "All nations" the cumulative
+Overall column is hidden, because it comes from a per-rider feed and fetching it for every rider would
+be too much for the provider.
+
+The Teams view shows the team standings per category (World Trophy, Junior, Women's, Manufacturer's,
+Club, Women's Club, Veteran Club). The provider publishes them after each special test with times
+cumulative across days, and lists a team only once all its riders have finished that test; each
+category therefore opens on the latest test every team has completed, with buttons for later tests.
 
 ## Files
 
@@ -65,6 +71,7 @@ Base URL: `https://apienduro.ficr.it/ENDUROISDE2026/END/`
 | `mpcache-20/get/plus/clasgiornata/{cod}/{day}` | riders out of the race |
 | `mpcache-20/get/plus/clasps/{cod}/{day}/{test}` | standing after a test, for positions within category and penalties |
 | `get/plus/resultconc/{cod}/{number}` | cumulative overall standing (one call per shown rider) |
+| `mpcache-20/get/plus/team-clasps/{cod}/{day}/{test}` | team standing after a test, cumulative across days |
 
 `ISDE1` is the World Trophy event (World, Junior and Women's Trophy), `ISDE2` the Club teams event.
 

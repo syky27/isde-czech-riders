@@ -17,6 +17,7 @@ export const urls = {
   dayClass: (cod, day) => `${BASE}/mpcache-20/get/plus/clasgiornata/${cod}/${day}`,
   stage: (cod, day, numero) => `${BASE}/mpcache-20/get/plus/clasps/${cod}/${day}/${numero}`,
   rider: (cod, num) => `${BASE}/get/plus/resultconc/${cod}/${num}`,
+  teams: (cod, day, numero) => `${BASE}/mpcache-20/get/plus/team-clasps/${cod}/${day}/${numero}`,
 };
 
 export async function getJson(url) {

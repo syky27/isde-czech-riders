@@ -214,3 +214,112 @@ export function dayComplete(program, day) {
   const stages = (program?.data ?? []).filter((s) => s.Tipo === 'PS' && toInt(s.Day) === day);
   return stages.length > 0 && stages.every((s) => s.StageStatus === '2');
 }
+
+// ---- Teams -------------------------------------------------------------
+
+/** Team categories in presentation order, with the codes used by the team feed. */
+export const TEAM_TYPES = [
+  { code: 'WT', name: 'World Trophy' },
+  { code: 'JW', name: 'Junior World Trophy' },
+  { code: 'WW', name: "Women's World Trophy" },
+  { code: 'MT', name: "Manufacturer's Team Award" },
+  { code: 'CT', name: 'Club Team Award' },
+  { code: 'CW', name: "Women's Club Team" },
+  { code: 'CV', name: 'Veteran Club Team' },
+];
+
+/** "LE QUERE Leo" → "Le Quere": the leading upper-case words are the surname. */
+export function surname(fullName) {
+  const words = String(fullName ?? '').trim().split(/\s+/).filter(Boolean);
+  const upper = [];
+  for (const w of words) {
+    if (w === w.toUpperCase() && /\p{L}/u.test(w)) upper.push(w);
+    else break;
+  }
+  const parts = upper.length ? upper : words.slice(0, 1);
+  return parts.map((w) => w.charAt(0) + w.slice(1).toLowerCase()).join(' ');
+}
+
+/** 1 → "1st", 22 → "22nd", 13 → "13th". */
+export function ordinal(n) {
+  const v = Math.abs(Number(n));
+  const suffix = v % 100 >= 11 && v % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][v % 10] ?? 'th';
+  return `${n}${suffix}`;
+}
+
+function majorityNation(riders) {
+  const counts = {};
+  for (const r of riders) if (r.Naz) counts[r.Naz] = (counts[r.Naz] ?? 0) + 1;
+  let best = '';
+  for (const r of riders) {
+    if (r.Naz && (best === '' || counts[r.Naz] > counts[best])) best = r.Naz;
+  }
+  return best;
+}
+
+/**
+ * Team standing from a team-clasps feed (standing after one special test;
+ * times are cumulative across days). Returns category code → ranked teams.
+ */
+export function teamStandings(feed) {
+  const out = {};
+  for (const team of feed?.data?.squadre ?? []) {
+    const sec = parseTime(team.Tempo);
+    if (sec == null || !team.SquTipo) continue;
+    const riders = (team.Concorrenti ?? [])
+      .map((r) => ({
+        num: r.Numero,
+        name: surname(r.CognomeNome),
+        nation: r.Naz ?? '',
+        time: r.Tempo ?? '',
+        sec: parseTime(r.Tempo),
+      }))
+      .sort((a, b) => (a.sec ?? Infinity) - (b.sec ?? Infinity));
+    (out[team.SquTipo] ??= []).push({
+      name: team.Squadra ?? '',
+      nation: majorityNation(team.Concorrenti ?? []),
+      time: team.Tempo,
+      sec,
+      riders,
+    });
+  }
+  for (const type of Object.keys(out)) {
+    const list = out[type].sort((a, b) => a.sec - b.sec);
+    const leader = list[0].sec;
+    list.forEach((t, i) => {
+      t.pos = i + 1;
+      t.gap = i === 0 ? '' : formatTime(Math.round((t.sec - leader) * 100) / 100);
+    });
+  }
+  return out;
+}
+
+/** Teams of a category listed after each test of the day: [{ code, count }] in test order. */
+export function stageCounts(feedsByCode, type) {
+  return Object.keys(feedsByCode ?? {}).map((code) => ({
+    code,
+    count: (feedsByCode[code]?.data?.squadre ?? []).filter((t) => t.SquTipo === type).length,
+  }));
+}
+
+/** Latest test that every team of the category has finished (the one with the most teams), or null. */
+export function defaultStage(feedsByCode, type) {
+  const counts = stageCounts(feedsByCode, type);
+  const max = Math.max(0, ...counts.map((c) => c.count));
+  if (!max) return null;
+  const full = counts.filter((c) => c.count === max);
+  return full[full.length - 1].code;
+}
+
+/** A nation's teams across categories: [{ type, pos, of, name }], in category order. */
+export function teamsOfNation(standings, nation) {
+  if (nation === ALL) return [];
+  const out = [];
+  for (const { code } of TEAM_TYPES) {
+    const list = standings?.[code] ?? [];
+    for (const team of list) {
+      if (team.nation === nation) out.push({ type: code, pos: team.pos, of: list.length, name: team.name });
+    }
+  }
+  return out;
+}

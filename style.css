@@ -130,6 +130,29 @@ abbr[title] { text-decoration: none; }
 .day.is-current { color: var(--red); border-bottom-color: var(--red); opacity: 1; }
 .day.is-current .day__label { color: var(--red); }
 
+.masthead__nav {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.views {
+  display: inline-flex;
+  border: 1px solid var(--rule);
+}
+
+.view {
+  padding: 6px 16px;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.view + .view { border-left: 1px solid var(--rule); }
+.view.is-current { background: var(--rule-strong); color: var(--paper); }
+
 /* Status ------------------------------------------------------------ */
 
 .status {
@@ -297,8 +320,66 @@ main { max-width: 1400px; margin: 0 auto; }
 
 /* Small screens ----------------------------------------------------- */
 
+/* Teams ------------------------------------------------------------- */
+
+.summary {
+  margin: 0 0 32px;
+  padding: 14px 18px;
+  border-left: 4px solid var(--red);
+  background: var(--sheet);
+}
+
+.summary__title {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 700;
+  font-variation-settings: 'wdth' 75;
+  line-height: 1.1;
+}
+
+.summary__list { margin: 0; padding-left: 1.2em; }
+.summary__list li { margin: 2px 0; }
+.summary__empty { margin: 0; color: var(--ink-soft); }
+
+.stage-note {
+  margin: 0 0 8px;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.stages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 10px;
+}
+
+.stage {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.stage.is-current { border-color: var(--red); color: var(--red); font-weight: 600; }
+.stage:disabled { opacity: 0.45; cursor: default; }
+.stage__count { margin-left: 5px; color: var(--ink-soft); font-size: 11px; }
+
+.sheet.teams .c-pos { position: static; }
+.sheet.teams .c-team { text-align: left; white-space: normal; min-width: 220px; }
+.sheet.teams .c-team .sub { white-space: normal; }
+.sheet.teams .c-gap { color: var(--ink-soft); }
+.sheet.teams tr.is-mine .c-pos { box-shadow: inset 3px 0 0 var(--red); }
+.sheet.teams tr.is-mine .name { color: var(--red); }
+
 @media (max-width: 640px) {
   .masthead { padding-top: 18px; }
+  .masthead__nav { width: 100%; align-items: stretch; }
+  .views { align-self: flex-start; }
   .days { width: 100%; justify-content: space-between; }
   .day { min-width: 0; flex: 1; font-size: 30px; }
   .sheet th, .sheet td { padding: 7px 7px; }
