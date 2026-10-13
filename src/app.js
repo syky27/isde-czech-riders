@@ -109,13 +109,17 @@ function numbersFor(cod) {
   return feed ? dayRows(feed, { nation: state.nation }).map((r) => r.num) : [];
 }
 
-function overallFor(cod, row, latestRows) {
+/**
+ * Cumulative standing of one rider. The per-rider feed only lists finished days from
+ * day 2 on; until then (and while day 2 is being ridden) the overall standing is the
+ * day 1 classification, taken from the day 1 results feed.
+ */
+function overallFor(cod, row, day1Rows) {
+  const fetched = state.overall[cod] && row.num in state.overall[cod];
   const o = state.overall[cod]?.[row.num];
   if (o) return { ...o, inProgress: !dayComplete(state.programs[cod], o.afterDay) };
-  // Until the provider publishes cumulative standings (from day 2 on),
-  // the overall standing equals the day 1 classification.
-  if (state.latestDay !== 1) return null;
-  const r = latestRows[row.num];
+  if (!fetched && state.latestDay > 1) return null; // not loaded yet
+  const r = day1Rows[row.num];
   if (!r || !r.started) return null;
   return { pos: r.dayPos, time: r.dayTime, afterDay: 1, inProgress: !dayComplete(state.programs[cod], 1) };
 }
@@ -126,12 +130,12 @@ function paintRiders(nationLabel) {
     const feed = state.tests[g.cod]?.[state.day];
     const cols = feed ? testColumns(feed) : [];
     const rows = feed ? dayRows(feed, { teams: state.teams[g.cod], nation: state.nation }) : [];
-    const latestFeed = state.tests[g.cod]?.[state.latestDay];
-    const latestRows =
-      state.day === state.latestDay || !latestFeed
+    const day1Feed = state.tests[g.cod]?.[1];
+    const day1Rows =
+      state.day === 1
         ? Object.fromEntries(rows.map((r) => [r.num, r]))
-        : Object.fromEntries(dayRows(latestFeed, { nation: state.nation }).map((r) => [r.num, r]));
-    const overall = showOverall ? Object.fromEntries(rows.map((r) => [r.num, overallFor(g.cod, r, latestRows)])) : {};
+        : Object.fromEntries((day1Feed ? dayRows(day1Feed, { nation: state.nation }) : []).map((r) => [r.num, r]));
+    const overall = showOverall ? Object.fromEntries(rows.map((r) => [r.num, overallFor(g.cod, r, day1Rows)])) : {};
     const stages = state.stageClass[g.cod]?.[state.day] ?? {};
     const ranks = {};
     const rankCache = {};
@@ -324,6 +328,14 @@ async function refreshOverall() {
     GROUPS.map(async (g) => {
       // The entry list occasionally comes back empty; retry it until it has riders.
       if (!state.entries[g.cod]?.length) await loadEntry(g.cod).catch((err) => console.warn('Entry list failed', g.cod, err));
+      // The day 1 classification doubles as the overall standing until day 2 is final.
+      if (state.day !== 1) {
+        await getJson(urls.tests(g.cod, 1))
+          .then((feed) => {
+            (state.tests[g.cod] ??= {})[1] = feed;
+          })
+          .catch((err) => console.warn('Day 1 feed failed', g.cod, err));
+      }
       const nums = numbersFor(g.cod);
       const settled = await Promise.allSettled(nums.map((n) => getJson(urls.rider(g.cod, n))));
       settled.forEach((res, i) => {

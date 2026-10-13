@@ -187,17 +187,22 @@ export function bestPerTest(rows, cols) {
   return best;
 }
 
+/** A days[] entry is real only once the day has a classification (ctp). Unfinished days
+ *  are listed with a placeholder total (three hours per missing day) and no ctp. */
+const isFinishedDay = (entry) => Boolean(entry?.ctp?.Tempo && entry?.rtp?.Tempo);
+
 /**
  * Cumulative standing from the per-rider feed (resultconc → data.days).
  * The provider's entry "giornata k" holds the classification of day k+1 and
  * the cumulative total through day k+1 (day 1 alone is never listed).
+ * Returns the latest finished day, or null when no day after day 1 is finished.
  */
 export function overallFromDays(days) {
   if (!Array.isArray(days)) return null;
   let found = null;
   for (const entry of days) {
     const rtp = entry?.rtp;
-    if (rtp && rtp.Tempo) {
+    if (isFinishedDay(entry)) {
       found = {
         afterDay: (toInt(entry.giornata) ?? 0) + 1,
         pos: toInt(rtp.Pos),
@@ -360,7 +365,7 @@ export function riderDetail(feed) {
   }
   const overallByDay = {};
   for (const d of feed.data.days ?? []) {
-    if (d?.rtp?.Tempo) overallByDay[(toInt(d.giornata) ?? 0) + 1] = { pos: toInt(d.rtp.Pos), time: d.rtp.Tempo };
+    if (isFinishedDay(d)) overallByDay[(toInt(d.giornata) ?? 0) + 1] = { pos: toInt(d.rtp.Pos), time: d.rtp.Tempo };
   }
   const days = [...byDay.values()]
     .filter((d) => d.lastCode)

@@ -48,6 +48,7 @@ const program25 = fixture('program_2025_ISDE1.json');
 const rc33 = fixture('resultconc_2025_ISDE1_33.json');
 const rc255 = fixture('resultconc_2025_ISDE1_255.json');
 const rc184 = fixture('resultconc_ISDE1_184.json');
+const rcLive = fixture('resultconc_ISDE1_10_day2_live.json');
 
 test('parseTime handles Microplus time strings', () => {
   assert.equal(parseTime("7'20.89"), 440.89);
@@ -358,4 +359,16 @@ test('riderDetail on a day in progress uses the last finished test as the day st
   assert.deepEqual(day1.overall, { pos: 74, time: "25'35.82" });
   assert.equal(riderDetail(null), null);
   assert.equal(riderDetail({ data: {} }), null);
+});
+
+test('overallFromDays ignores the provider’s placeholder entries for days not yet finished', () => {
+  // During the event every unfinished day is listed with a 3-hour placeholder and no day
+  // classification (ctp); only entries with a day classification are real.
+  assert.equal(overallFromDays(rcLive.data.days), null);
+  const d = riderDetail(rcLive);
+  assert.equal(d.days.length, 2); // day 1 complete, day 2 has one test so far
+  assert.deepEqual(d.days[0].overall, { pos: 1, time: "46'26.88" });
+  assert.equal(d.days[1].day, 2);
+  assert.equal(d.days[1].lastCode, 'ST1');
+  assert.equal(d.days[1].overall, null);
 });
