@@ -123,7 +123,8 @@ function rowHtml(row, cols, best, retired, overall, rank, { showOverall, showFla
   const flag = showFlags ? nationFlag(row.nation) : '';
   const href = riderHref ? riderHref(row.num) : '';
   const nameHtml = href ? `<a class="name" href="${esc(href)}">${esc(row.name)}</a>` : `<span class="name">${esc(row.name)}</span>`;
-  const riderCell = `<td class="c-rider"><span class="num">${esc(row.num)}</span> ${nameHtml}${flag ? ` <span class="flag" title="${esc(row.nation)}">${flag}</span>` : ''}<span class="sub">${esc(row.team)}${row.team && row.bike ? ', ' : ''}${esc(row.bike)}</span></td>`;
+  const details = [row.team, row.bike, row.startTime ? `start ${row.startTime}` : ''].filter(Boolean).map(esc).join(', ');
+  const riderCell = `<td class="c-rider"><span class="num">${esc(row.num)}</span> ${nameHtml}${flag ? ` <span class="flag" title="${esc(row.nation)}">${flag}</span>` : ''}<span class="sub">${details}</span></td>`;
 
   const testCells = cols
     .map((col) => {
@@ -138,7 +139,7 @@ function rowHtml(row, cols, best, retired, overall, rank, { showOverall, showFla
   if (out) {
     dayCell = `<td class="c-day"><span class="t">Retired</span><span class="sub">${esc(out.replace(/\s+/g, ' '))}</span></td>`;
   } else if (!row.started) {
-    dayCell = `<td class="c-day"><span class="muted">${row.startTime ? `Starts ${esc(row.startTime)}` : 'Not started yet'}</span></td>`;
+    dayCell = `<td class="c-day"><span class="muted">Not started yet</span></td>`;
   } else {
     const gap = row.dayGap ? `+${esc(row.dayGap)}` : 'leader';
     const penalties = [
