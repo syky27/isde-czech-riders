@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { EDITIONS, DEFAULT_EDITION, editionByYear, editionByEvent, urlsFor, liveUrl } from '../src/api.js';
+import { EDITIONS, DEFAULT_EDITION, editionByYear, editionByEvent, urlsFor, liveUrl, pathsFor } from '../src/api.js';
 
 test('editions are looked up by year and by event code', () => {
   assert.equal(DEFAULT_EDITION.year, 2026);
@@ -23,4 +23,14 @@ test('archived editions read the data folder, live editions the timing API', () 
   assert.equal(liveUrl({ event: 'E' }, 'a/b'), 'https://apienduro.ficr.it/E/END/a/b');
   assert.equal(liveUrl({ event: 'E', base: 'https://ws.example' }, 'a/b'), 'https://ws.example/END/a/b');
   assert.equal(editionByYear(2024).base, 'https://wsenduroisde2024.microplustiming.com');
+});
+
+test('older editions use uncached paths and have no team feed', () => {
+  const old = editionByYear(2022);
+  assert.equal(old.teams, false);
+  assert.equal(pathsFor(old).program('ISDE1'), 'get/plus/program/ISDE1');
+  assert.equal(pathsFor(old).tests('ISDE2', 4), 'get/plus/risultatiprove/ISDE2/4');
+  assert.equal(pathsFor(DEFAULT_EDITION).tests('ISDE2', 4), 'mpcache-20/get/plus/risultatiprove/ISDE2/4');
+  assert.equal(urlsFor(old).stage('ISDE1', 1, 3), 'data/ENDUROISDE2022/END/get/plus/clasps/ISDE1/1/3.json');
+  assert.deepEqual(EDITIONS.map((e) => e.year), [2026, 2025, 2024, 2023, 2022, 2021]);
 });

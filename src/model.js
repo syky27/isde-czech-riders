@@ -208,7 +208,7 @@ export function lastCompletedDay(program) {
 function dayEntries(days, throughDay) {
   const out = {};
   for (const entry of Array.isArray(days) ? days : []) {
-    if (!entry?.rtp?.Tempo) continue;
+    if (parseTime(entry?.rtp?.Tempo) == null) continue; // missing, or a placeholder such as "*****"
     const day = (toInt(entry.giornata) ?? 0) + 1;
     const real = throughDay != null ? day <= throughDay : Boolean(entry.ctp?.Tempo);
     if (real) out[day] = entry;
@@ -443,14 +443,19 @@ export function finalStanding(feed, { throughDay = null } = {}) {
   };
 }
 
-/** Final classification rows for a nation (or ALL), by final position; unclassified riders last. */
+/**
+ * Final classification rows for a nation (or ALL): riders standing after the most days
+ * first, then by position; unclassified riders last.
+ */
 export function finalRows(riders, { nation = ALL } = {}) {
   return (riders ?? [])
     .filter((r) => nation === ALL || r.nation === nation)
     .sort((a, b) => {
+      const da = a.total?.afterDay ?? -1;
+      const db = b.total?.afterDay ?? -1;
       const pa = a.total?.pos ?? Infinity;
       const pb = b.total?.pos ?? Infinity;
-      return pa - pb || String(a.name).localeCompare(String(b.name));
+      return db - da || pa - pb || String(a.name).localeCompare(String(b.name));
     });
 }
 

@@ -12,9 +12,11 @@ const CATEGORY_NAMES = {
   WWT: "Women's World Trophy",
 };
 
-/** "ST3 SANTIAGO DO CACEM" → "Santiago do Cacem" */
+/** "ST3 SANTIAGO DO CACEM" → "Santiago do Cacem"; also strips "CT 1" for code CT1. */
 function testPlace(name, code) {
-  const rest = String(name ?? '').replace(new RegExp(`^${code}\\s*`, 'i'), '').trim();
+  const m = /^([A-Za-z]+)(\d*)$/.exec(code ?? '');
+  const prefix = m ? `^${m[1]}\\s*${m[2]}\\s*[-–:]?\\s*` : `^${code}\\s*`;
+  const rest = String(name ?? '').replace(new RegExp(prefix, 'i'), '').trim();
   if (!rest) return '';
   return rest
     .toLowerCase()
@@ -185,6 +187,9 @@ export function renderGroups(container, groups, { showOverall = true, showFlags 
       if (!g.loaded) return `<section class="group">${header}<p class="empty">Waiting for the timing server…</p></section>`;
       if (!g.fieldSize) return `<section class="group">${header}<p class="empty">No results for day ${g.day} yet.</p></section>`;
       if (!count) return `<section class="group">${header}<p class="empty">No riders from ${esc(nationLabel)} in this event.</p></section>`;
+      if (g.unpublished) {
+        return `<section class="group">${header}<p class="empty">The timing provider did not publish the day ${g.day} list for this edition. The day's times are on the rider pages and in the Final tab.</p></section>`;
+      }
 
       const testHeads = g.cols
         .map((c) => `<th class="c-test" scope="col"><span class="test-code">${esc(c.code)}</span><span class="test-name">${esc(testPlace(c.name, c.code))}</span></th>`)
@@ -252,7 +257,11 @@ function teamSection(section, nation, riderHref) {
  * sections: [{ type, name, stages: [{ code, name, count, selected }], max, rows }]
  * summary: [{ typeName, pos, of, name, stage }] — the selected nation's teams
  */
-export function renderTeams(container, { sections, summary, nation, nationLabel, day, loaded, riderHref = null }) {
+export function renderTeams(container, { sections, summary, nation, nationLabel, day, loaded, riderHref = null, unavailable = false }) {
+  if (unavailable) {
+    container.innerHTML = `<p class="empty">The timing provider published no team standings feed for this edition. Team results are in the official PDF documents linked below.</p>`;
+    return;
+  }
   if (!loaded) {
     container.innerHTML = `<p class="empty">Waiting for the timing server…</p>`;
     return;
@@ -332,9 +341,9 @@ export function renderPdfLinks(container, { links, day }) {
  *         gap, catPos, catSize, classPos, classSize }]
  */
 export function renderFinal(container, { groups, days, nation, nationLabel, complete, riderHref, showFlags }) {
-  const title = complete ? 'final classification' : 'overall standing so far';
   container.innerHTML = groups
     .map((g) => {
+      const title = complete && (g.through ?? 6) >= 6 ? 'final classification' : `overall standing after day ${g.through || '–'}`;
       const header = `<h2 class="group__title">${esc(g.label)}<span class="group__count">${g.rows.length ? `${g.rows.length} rider${g.rows.length === 1 ? '' : 's'}, ${title}` : title}</span></h2>`;
       if (!g.loaded) return `<section class="group">${header}<p class="empty">Waiting for the timing server…</p></section>`;
       if (!g.rows.length) return `<section class="group">${header}<p class="empty">No riders from ${esc(nationLabel)} in this event.</p></section>`;
@@ -363,7 +372,7 @@ function finalTable(rows, { days, nation, complete, riderHref, showFlags }) {
         ? `<td class="c-pos"><span class="pos">${r.total.pos}</span><span class="sub">${r.catPos ? `${r.catPos}. ${esc(r.cat)}` : esc(r.cat)}</span></td>`
         : `<td class="c-pos"><span class="pos muted">–</span><span class="sub">${esc(r.cat)}</span></td>`;
       const totalCell = r.total
-        ? `<td class="c-day"><span class="t">${esc(r.total.time)}</span><span class="sub">${r.gap ? `+${esc(r.gap)}` : 'leader'}${complete || r.total.afterDay >= 6 ? '' : `, after day ${r.total.afterDay}`}</span></td>`
+        ? `<td class="c-day"><span class="t">${esc(r.total.time)}</span><span class="sub">${r.gap ? `+${esc(r.gap)}` : 'leader'}${r.total.afterDay >= 6 ? '' : `, after day ${r.total.afterDay}`}</span></td>`
         : `<td class="c-day"><span class="muted">Not classified</span></td>`;
       return `<tr class="rider${r.total ? '' : ' is-out'}">${posCell}<td class="c-rider"><span class="num">${esc(r.num)}</span> ${nameHtml}${flag ? ` <span class="flag" title="${esc(r.nation)}">${flag}</span>` : ''}<span class="sub">${details}</span></td><td class="c-cls">${esc(r.cls)}</td>${dayCells}${totalCell}</tr>`;
     })

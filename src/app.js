@@ -64,6 +64,7 @@ const state = {
   overall: {}, // cod → num → cumulative standing
   standing: {}, // cod → num → finalStanding() of fetched riders (live mode)
   final: {}, // cod → archived final classification (riders[] + generatedAt)
+  archiveMeta: null, // data/<event>/meta.json of an archived edition
   rider: null, // { cod, num } of the rider panel, or null
   riderFeed: null, // { key, feed } for the open rider
   riderError: null,
@@ -165,7 +166,8 @@ function paintFinal(nationLabel) {
       team: r.team ?? state.teams[g.cod]?.[r.num]?.team ?? '',
       ...(ranks[r.num] ?? {}),
     }));
-    return { label: g.label, loaded: true, rows };
+    const through = Math.max(0, ...rows.map((r) => r.total?.afterDay ?? 0));
+    return { label: g.label, loaded: true, rows, through };
   });
   const loaded = groups.some((g) => g.loaded);
   renderFinal(els.main, {
@@ -204,12 +206,17 @@ function paintRiders(nationLabel) {
       rankCache[row.lastPs] ??= rankWithin(stages[row.lastPs], { nation: state.nation });
       ranks[row.num] = rankCache[row.lastPs][row.num];
     }
+    const fieldSize = feed?.data?.result?.length ?? 0;
+    // A finished day whose list has no times at all was never published as a list (older editions' final motocross).
+    const unpublished =
+      fieldSize > 0 && dayComplete(state.programs[g.cod], state.day) && !dayRows(feed, { nation: ALL }).some((r) => r.started);
     return {
       cod: g.cod,
       label: g.label,
       day: state.day,
       loaded: Boolean(feed),
-      fieldSize: feed?.data?.result?.length ?? 0,
+      fieldSize,
+      unpublished,
       cols,
       rows,
       best: bestPerTest(rows, cols),
@@ -227,6 +234,10 @@ function paintRiders(nationLabel) {
 
 function paintTeams(nationLabel) {
   const day = feedDay();
+  if (state.edition.teams === false) {
+    renderTeams(els.main, { sections: [], summary: [], nation: state.nation, nationLabel, day, loaded: true, unavailable: true });
+    return { hasData: true, note: '' };
+  }
   const loaded = GROUPS.some((g) => state.teamFeeds[g.cod]?.[day]);
   const sections = [];
   const selectedStandings = {};
@@ -298,8 +309,9 @@ function paint() {
   setHidden(els.legendTeams, state.view !== 'teams');
   setHidden(els.legendRider, !riderPage);
 
-  const archivedOn = state.edition.archived ? (GROUPS.map((g) => state.final[g.cod]?.generatedAt).find(Boolean) ?? '').slice(0, 10) || 'file' : '';
-  renderStatus(els.status, { loading: state.loading, updatedAt: state.updatedAt, error: state.error, hasData, note, day: state.day, dayState: dayState(), archived: archivedOn });
+  const archivedOn = state.edition.archived ? (state.archiveMeta?.generatedAt ?? GROUPS.map((g) => state.final[g.cod]?.generatedAt).find(Boolean) ?? '').slice(0, 10) || 'file' : '';
+  const editionNote = state.edition.note ?? '';
+  renderStatus(els.status, { loading: state.loading, updatedAt: state.updatedAt, error: state.error, hasData, note: [note, editionNote].filter(Boolean).join(' '), day: state.day, dayState: dayState(), archived: archivedOn });
   renderPdfLinks(els.pdf, { day: feedDay(), links: GROUPS.map((g) => ({ label: g.label, href: urls.pdfPage(g.cod, feedDay()) })) });
   const who = state.nation === ALL ? 'All riders' : nationName(state.nation, lang);
   if (riderPage) {
@@ -388,7 +400,7 @@ async function refreshDay() {
       const stageClass = Object.fromEntries(codes.map((code, i) => [code, stageFeeds[i]]).filter(([, feed]) => feed));
       // Team standings after every test of the day, only while the Teams view is open.
       let teamFeeds = null;
-      if (view === 'teams') {
+      if (view === 'teams' && state.edition.teams !== false) {
         const feeds = await Promise.all(cols.map((c) => fetchJson(urls.teams(g.cod, day, c.numero)).catch(() => null)));
         teamFeeds = Object.fromEntries(cols.map((c, i) => [c.code, feeds[i]]));
       }
@@ -457,6 +469,14 @@ async function loadEntry(cod) {
 
 /** Programs are required; entry lists are optional (team names, nation list, overall standings). */
 async function loadStatic() {
+  if (state.edition.archived) {
+    fetchJson(urls.meta())
+      .then((meta) => {
+        state.archiveMeta = meta;
+        paint();
+      })
+      .catch(() => {});
+  }
   await Promise.all(
     GROUPS.map(async (g) => {
       const [program] = await Promise.all([
@@ -519,6 +539,7 @@ function resetEdition(edition) {
   for (const key of ['programs', 'teams', 'entries', 'tests', 'dayClass', 'stageClass', 'teamFeeds', 'teamStage', 'overall', 'standing', 'final']) {
     state[key] = {};
   }
+  state.archiveMeta = null;
   state.rider = null;
   state.riderFeed = null;
   state.riderError = null;

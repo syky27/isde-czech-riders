@@ -424,6 +424,20 @@ test('finalRows filters by nation and orders by final position, unclassified rid
   assert.deepEqual(finalRows(riders, { nation: 'CZE' }).map((r) => r.num), ['2', '3', '9']);
   assert.deepEqual(finalRows(riders, { nation: ALL }).map((r) => r.num), ['1', '2', '3', '9']);
   assert.deepEqual(finalRows(null, { nation: ALL }), []);
+  // A standing after fewer days ranks below everyone standing after more days.
+  const mixed = [
+    { num: 'a', name: 'A', nation: 'X', total: { pos: 1, time: "1'00.00", afterDay: 1 } },
+    { num: 'b', name: 'B', nation: 'X', total: { pos: 9, time: "9'00.00", afterDay: 3 } },
+  ];
+  assert.deepEqual(finalRows(mixed).map((r) => r.num), ['b', 'a']);
+});
+
+test('overallFromDays ignores entries whose total is not a time', () => {
+  const days = [
+    { giornata: '1', ctp: { Pos: '1', Tempo: "30'00.00" }, rtp: { Pos: '1', Tempo: "1:00'00.00" } },
+    { giornata: '2', ctp: { Pos: '1', Tempo: '*****' }, rtp: { Pos: '1', Tempo: '*****' } },
+  ];
+  assert.deepEqual(overallFromDays(days, { throughDay: 6 }), { afterDay: 2, pos: 1, time: "1:00'00.00", dayPos: 1, dayTime: "30'00.00" });
 });
 
 test('lastCompletedDay counts finished days from the programme', () => {
