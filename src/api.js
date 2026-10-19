@@ -1,20 +1,18 @@
 // Endpoints of the Microplus / FICR timing API that powers
-// https://www.fim-6days.com/info/results (embedded enduroisde2026.microplustiming.com).
-// Change EVENT for another edition; the path layout has been stable across years.
-
-export const EVENT = 'ENDUROISDE2026';
-export const LIVE_BASE = `https://apienduro.ficr.it/${EVENT}/END`;
-export const ARCHIVE_BASE = `data/${EVENT}/END`;
+// https://www.fim-6days.com/info/results (embedded enduroisde<year>.microplustiming.com).
+// The path layout has been stable across editions.
 
 /**
- * When true the page reads the archived copy of the feeds (data/<EVENT>/, made by
- * scripts/snapshot.mjs) instead of the live timing API, and stops auto-refreshing.
- * Set to false for a running event.
+ * Editions the page can show. `archived` editions are read from data/<event>/ (made by
+ * scripts/snapshot.mjs) and never refresh; a running event has archived: false.
  */
-export const ARCHIVED = true;
-
-/** The provider's own results app, used for links to the official PDF documents. */
-export const APP = 'https://enduroisde2026.microplustiming.com';
+export const EDITIONS = [
+  { event: 'ENDUROISDE2026', year: 2026, place: 'Grândola, Portugal', app: 'https://enduroisde2026.microplustiming.com', archived: true },
+  { event: 'ENDUROISDE2025', year: 2025, place: 'Bergamo, Italy', app: 'https://enduroisde2025.microplustiming.com', archived: true },
+];
+export const DEFAULT_EDITION = EDITIONS[0];
+export const editionByYear = (year) => EDITIONS.find((e) => String(e.year) === String(year)) ?? null;
+export const editionByEvent = (event) => EDITIONS.find((e) => e.event === event) ?? null;
 
 export const GROUPS = [
   { cod: 'ISDE1', label: 'World Trophy' },
@@ -33,17 +31,21 @@ export const paths = {
   listpdf: (cod) => `get/plus/listpdf/${cod}`,
 };
 
-export const liveUrl = (path) => `${LIVE_BASE}/${path}`;
-export const archiveUrl = (path) => `${ARCHIVE_BASE}/${path}.json`;
-const feedUrl = (path) => (ARCHIVED ? archiveUrl(path) : liveUrl(path));
+export const liveUrl = (edition, path) => `https://apienduro.ficr.it/${edition.event}/END/${path}`;
+export const archiveUrl = (edition, path) => `data/${edition.event}/END/${path}.json`;
 
-export const urls = Object.fromEntries(Object.entries(paths).map(([name, fn]) => [name, (...args) => feedUrl(fn(...args))]));
-urls.pdfPage = (cod, day) => `${APP}/#/END/plus/pdf/${cod}/${day}`;
-/** Final classification per event, derived from the per-rider feeds by scripts/snapshot.mjs. */
-urls.final = (cod) => `data/${EVENT}/final/${cod}.json`;
+/** URL builders for one edition: the archive when it has one, otherwise the live API. */
+export function urlsFor(edition) {
+  const feed = (path) => (edition.archived ? archiveUrl(edition, path) : liveUrl(edition, path));
+  const urls = Object.fromEntries(Object.entries(paths).map(([name, fn]) => [name, (...args) => feed(fn(...args))]));
+  urls.pdfPage = (cod, day) => `${edition.app}/#/END/plus/pdf/${cod}/${day}`;
+  /** Final classification per event, derived from the per-rider feeds by scripts/snapshot.mjs. */
+  urls.final = (cod) => `data/${edition.event}/final/${cod}.json`;
+  return urls;
+}
 
-export async function getJson(url) {
-  const res = await fetch(url, { cache: ARCHIVED ? 'default' : 'no-store' });
+export async function getJson(url, { live = false } = {}) {
+  const res = await fetch(url, { cache: live ? 'no-store' : 'default' });
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
   return res.json();
 }

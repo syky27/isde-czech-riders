@@ -1,6 +1,6 @@
-# Czech riders at ISDE 2026
+# Czech riders at the ISDE
 
-A single static page that shows, for the riders of one nation (Czech by default, any nation selectable, or everyone) at the FIM International Six Days Enduro 2026 (Portugal):
+A single static page that shows, for the riders of one nation (Czech by default, any nation selectable, or everyone) at the FIM International Six Days Enduro, editions 2026 (Portugal) and 2025 (Italy):
 
 - the time and position in each special test of the selected day,
 - the day time, gap and position in the day classification,
@@ -10,7 +10,7 @@ It reads the same live JSON feeds (Microplus / FICR timing) that power the resul
 <https://www.fim-6days.com/info/results>, directly from the browser. No build step, no server code,
 no dependencies.
 
-Deep links: `#nation=GBR&day=2`, `#view=teams&nation=CZE&day=1`. With "All nations" the cumulative
+Deep links: `#nation=GBR&day=2`, `#view=teams&nation=CZE&day=1`, `#edition=2025&nation=CZE&day=final`. With "All nations" the cumulative
 Overall column is hidden, because it comes from a per-rider feed and fetching it for every rider would
 be too much for the provider.
 
@@ -25,20 +25,24 @@ category therefore opens on the latest test every team has completed, with butto
 
 ## Archive
 
-The timing provider keeps an edition online for about a year. `node scripts/snapshot.mjs` downloads
-every feed the page uses into `data/<EVENT>/END/…json` (same paths as the API) and builds
-`data/<EVENT>/final/<cod>.json`, the final classification derived from the per-rider feeds. With
-`ARCHIVED = true` in `src/api.js` the page reads those files instead of the API and stops refreshing.
-The "Final" tab shows that classification for every rider, with day times and the total.
+The timing provider keeps an edition online for about a year. `node scripts/snapshot.mjs [EVENT]`
+downloads every feed the page uses into `data/<EVENT>/END/…json` (same paths as the API) and builds
+`data/<EVENT>/final/<cod>.json`, the final classification derived from the per-rider feeds. Editions
+are listed in `EDITIONS` in `src/api.js`; an edition with `archived: true` is read from those files and
+never refreshes, a running event has `archived: false` and is read live. The "Final" tab shows the
+classification for every rider, with day times and the total. Archived so far: 2026 and 2025.
+
+For a new edition: add it to `EDITIONS` with `archived: false` (and its `app` host), and after the
+event run the snapshot and set `archived: true`.
 
 ## Files
 
 | Path | Purpose |
 | --- | --- |
 | `index.html`, `style.css` | the page |
-| `src/api.js` | feed URLs, live or archived (change `EVENT` for another edition) |
+| `src/api.js` | editions and feed URLs, live or archived |
 | `scripts/snapshot.mjs` | archives all feeds and builds the final classification |
-| `data/` | the archived feeds of ISDE 2026 |
+| `data/` | the archived feeds, one folder per edition |
 | `src/nations.js` | nation codes → names and flags |
 | `src/model.js` | pure data transformations, unit-tested |
 | `src/render.js` | HTML rendering |
@@ -75,7 +79,7 @@ The `.nojekyll` file is already there so GitHub serves the files as they are.
 
 ## How the feeds are used
 
-Base URL: `https://apienduro.ficr.it/ENDUROISDE2026/END/`
+Base URL: `https://apienduro.ficr.it/<EVENT>/END/`, for example `ENDUROISDE2026`
 
 | Feed | Used for |
 | --- | --- |

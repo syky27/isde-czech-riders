@@ -1,4 +1,4 @@
-import { GROUPS, ARCHIVED, urls, getJson } from './api.js';
+import { GROUPS, EDITIONS, DEFAULT_EDITION, editionByYear, urlsFor, getJson } from './api.js';
 import {
   ALL,
   FINAL,
@@ -35,6 +35,8 @@ import {
   renderTitle,
   renderRider,
   renderPdfLinks,
+  renderEdition,
+  setEditionParam,
   hashFor,
 } from './render.js';
 
@@ -45,6 +47,7 @@ const RETRY_MS = 60_000;
 const lang = navigator.language || 'en';
 
 const state = {
+  edition: DEFAULT_EDITION,
   view: 'riders', // 'riders' | 'teams' | 'rider'
   listView: 'riders', // the last list view, where the rider page's back link goes
   nation: DEFAULT_NATION,
@@ -69,8 +72,13 @@ const state = {
   loading: true,
 };
 
+let urls = urlsFor(DEFAULT_EDITION);
+const fetchJson = (url) => getJson(url, { live: !state.edition.archived });
+
 const els = {
   title: document.getElementById('title'),
+  subtitle: document.getElementById('subtitle'),
+  edition: document.getElementById('edition'),
   nation: document.getElementById('nation'),
   views: document.getElementById('views'),
   days: document.getElementById('days'),
@@ -93,6 +101,7 @@ function parseHash() {
   const requested = params.get('view');
   const view = requested === 'rider' && rider ? 'rider' : requested === 'teams' ? 'teams' : 'riders';
   return {
+    edition: editionByYear(params.get('edition')) ?? DEFAULT_EDITION,
     view,
     nation: nation || null,
     day: day === FINAL || (Number.isInteger(day) && day >= 1 && day <= 6) ? day : null,
@@ -169,7 +178,7 @@ function paintFinal(nationLabel) {
     showFlags: state.nation === ALL,
   });
   const note =
-    !ARCHIVED && state.nation === ALL && !GROUPS.some((g) => state.final[g.cod])
+    !state.edition.archived && state.nation === ALL && !GROUPS.some((g) => state.final[g.cod])
       ? 'The cumulative classification is shown per nation while the event is running.'
       : '';
   return { hasData: loaded, note };
@@ -263,10 +272,14 @@ function paint() {
 
   const riderPage = state.view === 'rider';
   renderTitle(els.title, { nation: state.nation, lang });
+  // Guarded: a browser may briefly pair a cached older index.html with the new scripts.
+  if (els.subtitle) els.subtitle.textContent = `Riders at the FIM International Six Days Enduro ${state.edition.year}, ${state.edition.place}`;
+  if (els.edition) renderEdition(els.edition, { editions: EDITIONS, selected: state.edition.year });
   renderNation(els.nation, { options: options(), selected: state.nation, lang });
   renderViews(els.views, { view: state.view, nation: state.nation, day: state.day });
   renderDays(els.days, { day: state.day, latestDay: state.latestDay, nation: state.nation, view: state.view, finalLabel: eventComplete() ? 'Final' : 'Overall' });
   els.nation.closest('.nation').hidden = riderPage;
+  if (els.edition) els.edition.closest('.nation').hidden = riderPage;
   els.days.hidden = riderPage;
 
   const { hasData, note } = riderPage
@@ -282,16 +295,16 @@ function paint() {
   els.legendTeams.hidden = state.view !== 'teams';
   els.legendRider.hidden = !riderPage;
 
-  const archivedOn = ARCHIVED ? (GROUPS.map((g) => state.final[g.cod]?.generatedAt).find(Boolean) ?? '').slice(0, 10) || 'file' : '';
+  const archivedOn = state.edition.archived ? (GROUPS.map((g) => state.final[g.cod]?.generatedAt).find(Boolean) ?? '').slice(0, 10) || 'file' : '';
   renderStatus(els.status, { loading: state.loading, updatedAt: state.updatedAt, error: state.error, hasData, note, day: state.day, dayState: dayState(), archived: archivedOn });
   renderPdfLinks(els.pdf, { day: feedDay(), links: GROUPS.map((g) => ({ label: g.label, href: urls.pdfPage(g.cod, feedDay()) })) });
   const who = state.nation === ALL ? 'All riders' : nationName(state.nation, lang);
   if (riderPage) {
     const detail = state.riderFeed?.key === riderKey(state.rider) ? riderDetail(state.riderFeed.feed, { throughDay: throughDay(state.rider.cod) }) : null;
-    document.title = `${detail ? detail.name : `Rider ${state.rider.num}`}, ISDE 2026`;
+    document.title = `${detail ? detail.name : `Rider ${state.rider.num}`}, ISDE ${state.edition.year}`;
   } else {
     const dayLabel = state.day === FINAL ? (eventComplete() ? 'final' : 'overall') : `day ${state.day}`;
-    document.title = state.view === 'teams' ? `Team standings, ISDE 2026 ${dayLabel}` : `${who}, ISDE 2026 ${dayLabel}`;
+    document.title = state.view === 'teams' ? `Team standings, ISDE ${state.edition.year} ${dayLabel}` : `${who}, ISDE ${state.edition.year} ${dayLabel}`;
   }
 }
 
@@ -326,7 +339,7 @@ async function refreshRider() {
   if (!rider) return;
   const key = riderKey(rider);
   try {
-    const feed = await getJson(urls.rider(rider.cod, rider.num));
+    const feed = await fetchJson(urls.rider(rider.cod, rider.num));
     if (riderKey(state.rider) !== key) return;
     state.riderFeed = { key, feed };
     state.riderError = null;
@@ -349,7 +362,7 @@ async function refreshDay() {
   if (state.day === FINAL) {
     await Promise.all(
       GROUPS.map((g) =>
-        getJson(urls.final(g.cod))
+        fetchJson(urls.final(g.cod))
           .then((json) => {
             state.final[g.cod] = json;
           })
@@ -360,20 +373,20 @@ async function refreshDay() {
 
   const results = await Promise.allSettled(
     GROUPS.map(async (g) => {
-      const tests = await getJson(urls.tests(g.cod, day));
-      const dayClass = await getJson(urls.dayClass(g.cod, day)).catch(() => null);
+      const tests = await fetchJson(urls.tests(g.cod, day));
+      const dayClass = await fetchJson(urls.dayClass(g.cod, day)).catch(() => null);
       const cols = testColumns(tests);
       // Standing after each test a shown rider has just finished, for category positions and penalties.
       const numeroByCode = Object.fromEntries(cols.map((c) => [c.code, c.numero]));
       const codes = [...new Set(dayRows(tests, { nation }).map((r) => r.lastPs).filter((c) => c && numeroByCode[c]))];
       const stageFeeds = await Promise.all(
-        codes.map((code) => getJson(urls.stage(g.cod, day, numeroByCode[code])).catch(() => null)),
+        codes.map((code) => fetchJson(urls.stage(g.cod, day, numeroByCode[code])).catch(() => null)),
       );
       const stageClass = Object.fromEntries(codes.map((code, i) => [code, stageFeeds[i]]).filter(([, feed]) => feed));
       // Team standings after every test of the day, only while the Teams view is open.
       let teamFeeds = null;
       if (view === 'teams') {
-        const feeds = await Promise.all(cols.map((c) => getJson(urls.teams(g.cod, day, c.numero)).catch(() => null)));
+        const feeds = await Promise.all(cols.map((c) => fetchJson(urls.teams(g.cod, day, c.numero)).catch(() => null)));
         teamFeeds = Object.fromEntries(cols.map((c, i) => [c.code, feeds[i]]));
       }
       return { tests, dayClass, stageClass, teamFeeds };
@@ -410,14 +423,14 @@ async function refreshOverall() {
       if (!state.entries[g.cod]?.length) await loadEntry(g.cod).catch((err) => console.warn('Entry list failed', g.cod, err));
       // The day 1 classification doubles as the overall standing until day 2 is final.
       if (state.day !== 1) {
-        await getJson(urls.tests(g.cod, 1))
+        await fetchJson(urls.tests(g.cod, 1))
           .then((feed) => {
             (state.tests[g.cod] ??= {})[1] = feed;
           })
           .catch((err) => console.warn('Day 1 feed failed', g.cod, err));
       }
       const nums = numbersFor(g.cod);
-      const settled = await Promise.allSettled(nums.map((n) => getJson(urls.rider(g.cod, n))));
+      const settled = await Promise.allSettled(nums.map((n) => fetchJson(urls.rider(g.cod, n))));
       settled.forEach((res, i) => {
         if (res.status === 'fulfilled') {
           (state.overall[g.cod] ??= {})[nums[i]] = overallFromDays(res.value?.data?.days, { throughDay: throughDay(g.cod) });
@@ -432,7 +445,7 @@ async function refreshOverall() {
 
 /** Team names and the rider list of a group; kept only when the feed actually has riders. */
 async function loadEntry(cod) {
-  const entry = await getJson(urls.entrylist(cod));
+  const entry = await fetchJson(urls.entrylist(cod));
   const riders = entry?.data?.iscritti ?? [];
   if (!riders.length) return;
   state.teams[cod] = teamsByNumber(entry);
@@ -444,7 +457,7 @@ async function loadStatic() {
   await Promise.all(
     GROUPS.map(async (g) => {
       const [program] = await Promise.all([
-        getJson(urls.program(g.cod)),
+        fetchJson(urls.program(g.cod)),
         loadEntry(g.cod).catch((err) => console.warn('Entry list failed', g.cod, err)),
       ]);
       state.programs[g.cod] = program;
@@ -462,7 +475,17 @@ function validNation(code) {
 }
 
 function applyHash() {
-  const { view, nation, day, rider } = parseHash();
+  const parsed = parseHash();
+  if (parsed.edition !== state.edition) {
+    resetEdition(parsed.edition);
+    state.nation = parsed.nation ?? state.nation;
+    state.view = parsed.view;
+    state.listView = parsed.view === 'rider' ? 'riders' : parsed.view;
+    state.rider = parsed.rider;
+    loadEdition(parsed.day);
+    return;
+  }
+  const { view, nation, day, rider } = parsed;
   const riderChanged = riderKey(rider) !== riderKey(state.rider);
   state.rider = rider;
   if (riderChanged) {
@@ -485,39 +508,76 @@ function applyHash() {
   if (nationChanged) refreshOverall();
 }
 
-async function init() {
-  const initial = parseHash();
-  state.nation = initial.nation ?? DEFAULT_NATION;
-  state.view = initial.view;
-  state.rider = initial.rider;
-  if (initial.view !== 'rider') state.listView = initial.view;
+/** Switch the feeds to another edition and drop everything loaded for the previous one. */
+function resetEdition(edition) {
+  state.edition = edition;
+  urls = urlsFor(edition);
+  setEditionParam(edition === DEFAULT_EDITION ? null : edition.year);
+  for (const key of ['programs', 'teams', 'entries', 'tests', 'dayClass', 'stageClass', 'teamFeeds', 'teamStage', 'overall', 'standing', 'final']) {
+    state[key] = {};
+  }
+  state.rider = null;
+  state.riderFeed = null;
+  state.riderError = null;
+  state.updatedAt = null;
+  state.error = null;
+  state.latestDay = 1;
+  state.day = 1;
+}
+
+let timersRunning = false;
+function startTimers() {
+  if (timersRunning) return;
+  timersRunning = true;
+  setInterval(refreshDay, DAY_REFRESH_MS);
+  setInterval(refreshRider, DAY_REFRESH_MS);
+  setInterval(refreshOverall, OVERALL_REFRESH_MS);
+}
+
+/** Load the programme and entry lists of the current edition, then the requested (or default) day. */
+async function loadEdition(requestedDay) {
+  const edition = state.edition;
+  state.loading = true;
   paint();
   try {
     await loadStatic();
   } catch (err) {
+    if (state.edition !== edition) return;
     console.warn('Static feeds failed', err);
     state.error = err;
     state.loading = false;
     paint();
-    setTimeout(init, RETRY_MS);
+    setTimeout(() => state.edition === edition && loadEdition(requestedDay), RETRY_MS);
     return;
   }
+  if (state.edition !== edition) return;
   state.latestDay = Math.max(...GROUPS.map((g) => latestDay(state.programs[g.cod])));
-  state.day = initial.day ?? (eventComplete() ? FINAL : state.latestDay);
+  state.day = requestedDay ?? (eventComplete() ? FINAL : state.latestDay);
   state.nation = validNation(state.nation);
 
   await refreshDay();
   refreshOverall();
   refreshRider();
+  if (!edition.archived) startTimers();
+}
 
-  if (!ARCHIVED) {
-    setInterval(refreshDay, DAY_REFRESH_MS);
-    setInterval(refreshRider, DAY_REFRESH_MS);
-    setInterval(refreshOverall, OVERALL_REFRESH_MS);
-  }
+async function init() {
+  const initial = parseHash();
+  resetEdition(initial.edition);
+  state.nation = initial.nation ?? DEFAULT_NATION;
+  state.view = initial.view;
+  state.rider = initial.rider;
+  if (initial.view !== 'rider') state.listView = initial.view;
+  await loadEdition(initial.day);
+
   window.addEventListener('hashchange', applyHash);
   els.nation.addEventListener('change', () => {
     location.hash = hashFor(els.nation.value, state.day, state.view);
+  });
+  els.edition?.addEventListener('change', () => {
+    const edition = editionByYear(els.edition.value) ?? DEFAULT_EDITION;
+    const prefix = edition === DEFAULT_EDITION ? '' : `edition=${edition.year}&`;
+    location.hash = `#${prefix}nation=${encodeURIComponent(state.nation)}`;
   });
   els.main.addEventListener('click', (event) => {
     const button = event.target.closest('button.stage');

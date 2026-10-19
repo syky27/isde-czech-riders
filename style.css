@@ -76,6 +76,8 @@ abbr[title] { text-decoration: none; }
   font-size: 15px;
 }
 
+.controls { display: flex; flex-wrap: wrap; gap: 0 24px; }
+
 .nation {
   display: inline-flex;
   align-items: center;

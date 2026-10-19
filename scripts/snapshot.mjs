@@ -1,22 +1,26 @@
 #!/usr/bin/env node
 // Downloads every feed the page uses from the live timing API into data/<EVENT>/END/<path>.json
 // and builds data/<EVENT>/final/<cod>.json (final classification from the per-rider feeds).
-// Usage: node scripts/snapshot.mjs
+// Usage: node scripts/snapshot.mjs [EVENT]   (default: the newest edition in src/api.js)
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { EVENT, GROUPS, paths, liveUrl } from '../src/api.js';
+import { DEFAULT_EDITION, editionByEvent, GROUPS, paths, liveUrl } from '../src/api.js';
 import { finalStanding, teamsByNumber, lastCompletedDay } from '../src/model.js';
 
+const edition = process.argv[2] ? editionByEvent(process.argv[2]) : DEFAULT_EDITION;
+if (!edition) throw new Error(`Unknown event ${process.argv[2]}; add it to EDITIONS in src/api.js`);
+const EVENT = edition.event;
 const DAYS = [1, 2, 3, 4, 5, 6];
 const CONCURRENCY = 6;
 const root = new URL(`../data/${EVENT}/`, import.meta.url);
+console.log(`Archiving ${EVENT} (${edition.year}, ${edition.place})`);
 let downloaded = 0;
 let skipped = 0;
 
 async function fetchJson(path) {
-  const res = await fetch(liveUrl(path));
+  const res = await fetch(liveUrl(edition, path));
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${path}`);
   return res.json();
 }

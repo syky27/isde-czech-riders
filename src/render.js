@@ -27,12 +27,27 @@ function testPlace(name, code) {
 const catLabel = (cat) =>
   CATEGORY_NAMES[cat] ? `<abbr title="${esc(CATEGORY_NAMES[cat])}">${esc(cat)}</abbr>` : esc(cat);
 
+let editionParam = '';
+/** Edition carried in every generated hash; null for the default edition. */
+export function setEditionParam(year) {
+  editionParam = year ? `edition=${encodeURIComponent(year)}&` : '';
+}
+
 /** URL hash for a view. The rider page is its own view and carries the rider key (e.g. ISDE1-184). */
 export function hashFor(nation, day, view = 'riders', rider = null) {
   const tail = `nation=${encodeURIComponent(nation)}&day=${day}`;
-  if (view === 'rider' && rider) return `#view=rider&rider=${encodeURIComponent(rider)}&${tail}`;
-  if (view === 'teams') return `#view=teams&${tail}`;
-  return `#${tail}`;
+  if (view === 'rider' && rider) return `#${editionParam}view=rider&rider=${encodeURIComponent(rider)}&${tail}`;
+  if (view === 'teams') return `#${editionParam}view=teams&${tail}`;
+  return `#${editionParam}${tail}`;
+}
+
+export function renderEdition(select, { editions, selected }) {
+  const key = editions.map((e) => e.year).join(',');
+  if (select.dataset.key !== key) {
+    select.innerHTML = editions.map((e) => `<option value="${e.year}">${e.year}, ${esc(e.place)}</option>`).join('');
+    select.dataset.key = key;
+  }
+  if (select.value !== String(selected)) select.value = String(selected);
 }
 
 export function renderTitle(el, { nation, lang }) {
