@@ -21,4 +21,6 @@ test('archived editions read the data folder, live editions the timing API', () 
   const live = urlsFor({ event: 'ENDUROISDE2027', archived: false, app: 'https://y' });
   assert.equal(live.program('ISDE1'), 'https://apienduro.ficr.it/ENDUROISDE2027/END/mpcache-20/get/plus/program/ISDE1');
   assert.equal(liveUrl({ event: 'E' }, 'a/b'), 'https://apienduro.ficr.it/E/END/a/b');
+  assert.equal(liveUrl({ event: 'E', base: 'https://ws.example' }, 'a/b'), 'https://ws.example/END/a/b');
+  assert.equal(editionByYear(2024).base, 'https://wsenduroisde2024.microplustiming.com');
 });

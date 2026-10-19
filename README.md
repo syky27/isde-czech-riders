@@ -1,6 +1,6 @@
 # Czech riders at the ISDE
 
-A single static page that shows, for the riders of one nation (Czech by default, any nation selectable, or everyone) at the FIM International Six Days Enduro, editions 2026 (Portugal) and 2025 (Italy):
+A single static page that shows, for the riders of one nation (Czech by default, any nation selectable, or everyone) at the FIM International Six Days Enduro, editions 2026 (Portugal), 2025 (Italy) and 2024 (Spain):
 
 - the time and position in each special test of the selected day,
 - the day time, gap and position in the day classification,
@@ -30,7 +30,9 @@ downloads every feed the page uses into `data/<EVENT>/END/…json` (same paths a
 `data/<EVENT>/final/<cod>.json`, the final classification derived from the per-rider feeds. Editions
 are listed in `EDITIONS` in `src/api.js`; an edition with `archived: true` is read from those files and
 never refreshes, a running event has `archived: false` and is read live. The "Final" tab shows the
-classification for every rider, with day times and the total. Archived so far: 2026 and 2025.
+classification for every rider, with day times and the total. Archived so far: 2026, 2025 and 2024.
+The 2024 edition was served from its own host (`wsenduroisde2024.microplustiming.com`), set as `base`
+on the edition; 2023 is no longer available from the provider.
 
 For a new edition: add it to `EDITIONS` with `archived: false` (and its `app` host), and after the
 event run the snapshot and set `archived: true`.

@@ -290,10 +290,13 @@ function paint() {
         ? paintFinal(nationLabel)
         : paintRiders(nationLabel);
   const finalTab = state.view === 'riders' && state.day === FINAL;
-  els.legendRiders.hidden = state.view !== 'riders' || finalTab;
-  els.legendFinal.hidden = !finalTab;
-  els.legendTeams.hidden = state.view !== 'teams';
-  els.legendRider.hidden = !riderPage;
+  const setHidden = (el, hidden) => {
+    if (el) el.hidden = hidden;
+  };
+  setHidden(els.legendRiders, state.view !== 'riders' || finalTab);
+  setHidden(els.legendFinal, !finalTab);
+  setHidden(els.legendTeams, state.view !== 'teams');
+  setHidden(els.legendRider, !riderPage);
 
   const archivedOn = state.edition.archived ? (GROUPS.map((g) => state.final[g.cod]?.generatedAt).find(Boolean) ?? '').slice(0, 10) || 'file' : '';
   renderStatus(els.status, { loading: state.loading, updatedAt: state.updatedAt, error: state.error, hasData, note, day: state.day, dayState: dayState(), archived: archivedOn });
