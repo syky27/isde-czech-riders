@@ -1,6 +1,6 @@
 // HTML rendering. Everything that comes from the timing feed goes through esc().
 
-import { ALL, ordinal } from './model.js';
+import { ALL, FINAL, ordinal } from './model.js';
 import { nationName, nationFlag } from './nations.js';
 
 const esc = (value) =>
@@ -56,13 +56,16 @@ export function renderNation(select, { options, selected, lang }) {
   if (select.value !== selected) select.value = selected;
 }
 
-export function renderDays(container, { day, latestDay, nation, view }) {
-  container.innerHTML = [1, 2, 3, 4, 5, 6]
+export function renderDays(container, { day, latestDay, nation, view, finalLabel = 'Final' }) {
+  const days = [1, 2, 3, 4, 5, 6]
     .map((d) => {
       const classes = ['day', d === day ? 'is-current' : '', d > latestDay ? 'is-future' : ''].filter(Boolean).join(' ');
       return `<a class="${classes}" href="${hashFor(nation, d, view)}" aria-current="${d === day ? 'page' : 'false'}"><span class="day__label">Day</span>${d}</a>`;
     })
     .join('');
+  const finalClasses = ['day', 'day--final', day === FINAL ? 'is-current' : ''].filter(Boolean).join(' ');
+  const final = `<a class="${finalClasses}" href="${hashFor(nation, FINAL, view)}" aria-current="${day === FINAL ? 'page' : 'false'}"><span class="day__label">All days</span>${esc(finalLabel)}</a>`;
+  container.innerHTML = days + final;
 }
 
 export function renderViews(container, { view, nation, day }) {
@@ -80,11 +83,14 @@ const DAY_STATE = {
   future: (d) => `Day ${d} has not started.`,
 };
 
-export function renderStatus(el, { loading, updatedAt, error, hasData, note, day, dayState }) {
+export function renderStatus(el, { loading, updatedAt, error, hasData, note, day, dayState, archived }) {
   const time = updatedAt ? updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
   let text;
   let tone = 'ok';
-  if (error && hasData) {
+  if (archived) {
+    text = error && !hasData ? 'Could not load the archived results.' : `Final results of the event, archived on ${archived}.`;
+    tone = error && !hasData ? 'warn' : 'ok';
+  } else if (error && hasData) {
     text = `Timing server not reachable. Showing results from ${time}, retrying every minute.`;
     tone = 'warn';
   } else if (error) {
@@ -95,7 +101,7 @@ export function renderStatus(el, { loading, updatedAt, error, hasData, note, day
   } else {
     text = `Updated ${time}. Refreshes every minute.`;
   }
-  const state = dayState && DAY_STATE[dayState] ? DAY_STATE[dayState](day) : '';
+  const state = !archived && dayState && DAY_STATE[dayState] ? DAY_STATE[dayState](day) : '';
   el.textContent = [text, state, note].filter(Boolean).join(' ');
   el.dataset.tone = tone;
 }
@@ -251,7 +257,7 @@ export function renderTeams(container, { sections, summary, nation, nationLabel,
 }
 
 /** The rider page: one row per day, one cell per test, day standing and overall. */
-export function renderRider(container, { detail, team, retired = '', backHref, backLabel = 'Back to results', loading, error }) {
+export function renderRider(container, { detail, team, retired = '', final = null, backHref, backLabel = 'Back to results', loading, error }) {
   const close = `<a class="rider-panel__close" href="${esc(backHref)}">${esc(backLabel)}</a>`;
   if (!detail) {
     const text = error ? 'Could not load this rider from the timing server.' : loading ? 'Loading rider…' : 'No rider selected.';
@@ -261,7 +267,10 @@ export function renderRider(container, { detail, team, retired = '', backHref, b
   const flag = nationFlag(detail.nation);
   const meta = [team, detail.bike, detail.cls ? `class ${detail.cls}` : '', CATEGORY_NAMES[detail.cat] ?? detail.cat].filter(Boolean).map(esc).join(', ');
   const out = retired ? `<p class="rider-panel__out">Retired: ${esc(retired.replace(/\s+/g, ' '))}</p>` : '';
-  const head = `<div class="rider-panel__head"><div><h2 class="rider-panel__name"><span class="num">${esc(detail.num)}</span> ${esc(detail.name)}${flag ? ` <span class="flag" title="${esc(detail.nation)}">${flag}</span>` : ''}</h2><p class="rider-panel__meta">${meta}</p>${out}</div>${close}</div>`;
+  const finalLine = final
+    ? `<p class="rider-panel__final">${final.complete ? 'Final classification' : `Overall after day ${final.afterDay}`}: <b>${ordinal(final.pos)}</b>, ${esc(final.time)}</p>`
+    : '';
+  const head = `<div class="rider-panel__head"><div><h2 class="rider-panel__name"><span class="num">${esc(detail.num)}</span> ${esc(detail.name)}${flag ? ` <span class="flag" title="${esc(detail.nation)}">${flag}</span>` : ''}</h2><p class="rider-panel__meta">${meta}</p>${finalLine}${out}</div>${close}</div>`;
 
   if (!detail.days.length) {
     container.innerHTML = `<div class="rider-panel">${head}<p class="empty">${retired ? 'No test times.' : 'No test times yet.'}</p></div>`;
@@ -300,4 +309,52 @@ export function renderPdfLinks(container, { links, day }) {
   container.innerHTML = `Official documents and PDF results for day ${day}: ${links
     .map((l) => `<a href="${esc(l.href)}" rel="noopener">${esc(l.label)}</a>`)
     .join(', ')}.`;
+}
+
+/**
+ * The final (or current cumulative) classification.
+ * rows: [{ num, name, nation, team, bike, cls, cat, days: [{day,pos,time}], total: {pos,time,afterDay}|null,
+ *         gap, catPos, catSize, classPos, classSize }]
+ */
+export function renderFinal(container, { groups, days, nation, nationLabel, complete, riderHref, showFlags }) {
+  const title = complete ? 'final classification' : 'overall standing so far';
+  container.innerHTML = groups
+    .map((g) => {
+      const header = `<h2 class="group__title">${esc(g.label)}<span class="group__count">${g.rows.length ? `${g.rows.length} rider${g.rows.length === 1 ? '' : 's'}, ${title}` : title}</span></h2>`;
+      if (!g.loaded) return `<section class="group">${header}<p class="empty">Waiting for the timing server…</p></section>`;
+      if (!g.rows.length) return `<section class="group">${header}<p class="empty">No riders from ${esc(nationLabel)} in this event.</p></section>`;
+      return `<section class="group">${header}${finalTable(g.rows, { days, nation, complete, riderHref, showFlags })}</section>`;
+    })
+    .join('');
+}
+
+function finalTable(rows, { days, nation, complete, riderHref, showFlags }) {
+  const dayHeads = days.map((d) => `<th class="c-test" scope="col">Day ${d}</th>`).join('');
+  const body = rows
+    .map((r) => {
+      const href = riderHref ? riderHref(r.cod, r.num) : '';
+      const nameHtml = href ? `<a class="name" href="${esc(href)}">${esc(r.name)}</a>` : `<span class="name">${esc(r.name)}</span>`;
+      const flag = showFlags ? nationFlag(r.nation) : '';
+      const details = [r.team, r.bike].filter(Boolean).map(esc).join(', ');
+      const byDay = Object.fromEntries(r.days.map((d) => [d.day, d]));
+      const dayCells = days
+        .map((d) => {
+          const x = byDay[d];
+          if (!x || !x.time) return `<td class="c-test"><span class="muted">–</span></td>`;
+          return `<td class="c-test"><span class="t">${esc(x.time)}</span><span class="sub">${x.pos ?? '–'}.</span></td>`;
+        })
+        .join('');
+      const posCell = r.total
+        ? `<td class="c-pos"><span class="pos">${r.total.pos}</span><span class="sub">${r.catPos ? `${r.catPos}. ${esc(r.cat)}` : esc(r.cat)}</span></td>`
+        : `<td class="c-pos"><span class="pos muted">–</span><span class="sub">${esc(r.cat)}</span></td>`;
+      const totalCell = r.total
+        ? `<td class="c-day"><span class="t">${esc(r.total.time)}</span><span class="sub">${r.gap ? `+${esc(r.gap)}` : 'leader'}${complete || r.total.afterDay >= 6 ? '' : `, after day ${r.total.afterDay}`}</span></td>`
+        : `<td class="c-day"><span class="muted">Not classified</span></td>`;
+      return `<tr class="rider${r.total ? '' : ' is-out'}">${posCell}<td class="c-rider"><span class="num">${esc(r.num)}</span> ${nameHtml}${flag ? ` <span class="flag" title="${esc(r.nation)}">${flag}</span>` : ''}<span class="sub">${details}</span></td><td class="c-cls">${esc(r.cls)}</td>${dayCells}${totalCell}</tr>`;
+    })
+    .join('');
+  return `<div class="table-wrap"><table class="sheet">
+<thead><tr><th class="c-pos" scope="col">Pos</th><th class="c-rider" scope="col">Rider</th><th class="c-cls" scope="col">Class</th>${dayHeads}<th class="c-day" scope="col">Total</th></tr></thead>
+<tbody>${body}</tbody>
+</table></div>`;
 }

@@ -1,8 +1,10 @@
-import { GROUPS, urls, getJson } from './api.js';
+import { GROUPS, ARCHIVED, urls, getJson } from './api.js';
 import {
   ALL,
+  FINAL,
   TEAM_TYPES,
   latestDay,
+  lastCompletedDay,
   dayComplete,
   teamsByNumber,
   testColumns,
@@ -17,6 +19,9 @@ import {
   defaultStage,
   teamsOfNation,
   riderDetail,
+  finalStanding,
+  finalRows,
+  finalRanks,
 } from './model.js';
 import { nationName } from './nations.js';
 import {
@@ -24,6 +29,7 @@ import {
   renderViews,
   renderGroups,
   renderTeams,
+  renderFinal,
   renderStatus,
   renderNation,
   renderTitle,
@@ -53,6 +59,8 @@ const state = {
   teamFeeds: {}, // cod → day → test code → team-clasps feed
   teamStage: {}, // team category → test code chosen by the viewer (reset per day)
   overall: {}, // cod → num → cumulative standing
+  standing: {}, // cod → num → finalStanding() of fetched riders (live mode)
+  final: {}, // cod → archived final classification (riders[] + generatedAt)
   rider: null, // { cod, num } of the rider panel, or null
   riderFeed: null, // { key, feed } for the open rider
   riderError: null,
@@ -72,12 +80,14 @@ const els = {
   legendRiders: document.getElementById('legend-riders'),
   legendTeams: document.getElementById('legend-teams'),
   legendRider: document.getElementById('legend-rider'),
+  legendFinal: document.getElementById('legend-final'),
 };
 
 function parseHash() {
   const params = new URLSearchParams(location.hash.replace(/^#/, ''));
   const nation = (params.get('nation') ?? '').toUpperCase();
-  const day = Number(params.get('day'));
+  const dayParam = params.get('day');
+  const day = dayParam === FINAL ? FINAL : Number(dayParam);
   const riderMatch = /^(ISDE\d+)-(\d+)$/.exec(params.get('rider') ?? '');
   const rider = riderMatch ? { cod: riderMatch[1], num: riderMatch[2] } : null;
   const requested = params.get('view');
@@ -85,7 +95,7 @@ function parseHash() {
   return {
     view,
     nation: nation || null,
-    day: Number.isInteger(day) && day >= 1 && day <= 6 ? day : null,
+    day: day === FINAL || (Number.isInteger(day) && day >= 1 && day <= 6) ? day : null,
     rider: view === 'rider' ? rider : null,
   };
 }
@@ -93,7 +103,16 @@ function parseHash() {
 const riderKey = (r) => (r ? `${r.cod}-${r.num}` : null);
 const riderHref = (cod, num) => hashFor(state.nation, state.day, 'rider', `${cod}-${num}`);
 
+/** The day whose feeds the lists use; the Final tab shows day 6 in the Teams view. */
+const feedDay = () => (state.day === FINAL ? 6 : state.day);
+
+const eventComplete = () => GROUPS.every((g) => dayComplete(state.programs[g.cod], 6));
+
+/** Last finished day of an event, for reading the per-rider feed. */
+const throughDay = (cod) => lastCompletedDay(state.programs[cod]);
+
 function dayState() {
+  if (state.day === FINAL) return eventComplete() ? 'final' : 'live';
   if (state.day > state.latestDay) return 'future';
   return GROUPS.every((g) => dayComplete(state.programs[g.cod], state.day)) ? 'final' : 'live';
 }
@@ -122,6 +141,38 @@ function overallFor(cod, row, day1Rows) {
   const r = day1Rows[row.num];
   if (!r || !r.started) return null;
   return { pos: r.dayPos, time: r.dayTime, afterDay: 1, inProgress: !dayComplete(state.programs[cod], 1) };
+}
+
+function paintFinal(nationLabel) {
+  const groups = GROUPS.map((g) => {
+    const archived = state.final[g.cod]?.riders;
+    const live = state.standing[g.cod] ? Object.values(state.standing[g.cod]) : null;
+    const riders = archived ?? live;
+    if (!riders) return { label: g.label, loaded: false, rows: [] };
+    const ranks = finalRanks(riders);
+    const rows = finalRows(riders, { nation: state.nation }).map((r) => ({
+      ...r,
+      cod: g.cod,
+      team: r.team ?? state.teams[g.cod]?.[r.num]?.team ?? '',
+      ...(ranks[r.num] ?? {}),
+    }));
+    return { label: g.label, loaded: true, rows };
+  });
+  const loaded = groups.some((g) => g.loaded);
+  renderFinal(els.main, {
+    groups,
+    days: [1, 2, 3, 4, 5, 6],
+    nation: state.nation,
+    nationLabel,
+    complete: eventComplete(),
+    riderHref,
+    showFlags: state.nation === ALL,
+  });
+  const note =
+    !ARCHIVED && state.nation === ALL && !GROUPS.some((g) => state.final[g.cod])
+      ? 'The cumulative classification is shown per nation while the event is running.'
+      : '';
+  return { hasData: loaded, note };
 }
 
 function paintRiders(nationLabel) {
@@ -166,7 +217,8 @@ function paintRiders(nationLabel) {
 }
 
 function paintTeams(nationLabel) {
-  const loaded = GROUPS.some((g) => state.teamFeeds[g.cod]?.[state.day]);
+  const day = feedDay();
+  const loaded = GROUPS.some((g) => state.teamFeeds[g.cod]?.[day]);
   const sections = [];
   const selectedStandings = {};
   const selectedStage = {};
@@ -174,7 +226,7 @@ function paintTeams(nationLabel) {
     // Each category lives in one of the two events; take the first that has teams of it.
     let found = null;
     for (const g of GROUPS) {
-      const feeds = state.teamFeeds[g.cod]?.[state.day];
+      const feeds = state.teamFeeds[g.cod]?.[day];
       if (!feeds) continue;
       const counts = stageCounts(feeds, type);
       const max = Math.max(0, ...counts.map((c) => c.count));
@@ -184,7 +236,7 @@ function paintTeams(nationLabel) {
       }
     }
     if (!found) continue;
-    const nameByCode = Object.fromEntries(testColumns(state.tests[found.cod]?.[state.day]).map((c) => [c.code, c.name]));
+    const nameByCode = Object.fromEntries(testColumns(state.tests[found.cod]?.[day]).map((c) => [c.code, c.name]));
     const chosen = state.teamStage[type];
     const selectedCode = chosen && found.counts.find((c) => c.code === chosen)?.count ? chosen : defaultStage(found.feeds, type);
     const rows = teamStandings(found.feeds[selectedCode])[type] ?? [];
@@ -194,7 +246,7 @@ function paintTeams(nationLabel) {
       type,
       name,
       cod: found.cod,
-      retired: retiredMap(state.dayClass[found.cod]?.[state.day]),
+      retired: retiredMap(state.dayClass[found.cod]?.[day]),
       max: found.max,
       rows,
       stages: found.counts.map((c) => ({ code: c.code, name: nameByCode[c.code] ?? c.code, count: c.count, selected: c.code === selectedCode })),
@@ -202,7 +254,7 @@ function paintTeams(nationLabel) {
   }
   const typeName = Object.fromEntries(TEAM_TYPES.map((t) => [t.code, t.name]));
   const summary = teamsOfNation(selectedStandings, state.nation).map((t) => ({ ...t, typeName: typeName[t.type], stage: selectedStage[t.type] }));
-  renderTeams(els.main, { sections, summary, nation: state.nation, nationLabel, day: state.day, loaded, riderHref });
+  renderTeams(els.main, { sections, summary, nation: state.nation, nationLabel, day, loaded, riderHref });
   return { hasData: loaded, note: '' };
 }
 
@@ -213,39 +265,54 @@ function paint() {
   renderTitle(els.title, { nation: state.nation, lang });
   renderNation(els.nation, { options: options(), selected: state.nation, lang });
   renderViews(els.views, { view: state.view, nation: state.nation, day: state.day });
-  renderDays(els.days, { day: state.day, latestDay: state.latestDay, nation: state.nation, view: state.view });
+  renderDays(els.days, { day: state.day, latestDay: state.latestDay, nation: state.nation, view: state.view, finalLabel: eventComplete() ? 'Final' : 'Overall' });
   els.nation.closest('.nation').hidden = riderPage;
   els.days.hidden = riderPage;
 
-  const { hasData, note } = riderPage ? paintRiderPage() : state.view === 'teams' ? paintTeams(nationLabel) : paintRiders(nationLabel);
-  els.legendRiders.hidden = state.view !== 'riders';
+  const { hasData, note } = riderPage
+    ? paintRiderPage()
+    : state.view === 'teams'
+      ? paintTeams(nationLabel)
+      : state.day === FINAL
+        ? paintFinal(nationLabel)
+        : paintRiders(nationLabel);
+  const finalTab = state.view === 'riders' && state.day === FINAL;
+  els.legendRiders.hidden = state.view !== 'riders' || finalTab;
+  els.legendFinal.hidden = !finalTab;
   els.legendTeams.hidden = state.view !== 'teams';
   els.legendRider.hidden = !riderPage;
 
-  renderStatus(els.status, { loading: state.loading, updatedAt: state.updatedAt, error: state.error, hasData, note, day: state.day, dayState: dayState() });
-  renderPdfLinks(els.pdf, { day: state.day, links: GROUPS.map((g) => ({ label: g.label, href: urls.pdfPage(g.cod, state.day) })) });
+  const archivedOn = ARCHIVED ? (GROUPS.map((g) => state.final[g.cod]?.generatedAt).find(Boolean) ?? '').slice(0, 10) || 'file' : '';
+  renderStatus(els.status, { loading: state.loading, updatedAt: state.updatedAt, error: state.error, hasData, note, day: state.day, dayState: dayState(), archived: archivedOn });
+  renderPdfLinks(els.pdf, { day: feedDay(), links: GROUPS.map((g) => ({ label: g.label, href: urls.pdfPage(g.cod, feedDay()) })) });
   const who = state.nation === ALL ? 'All riders' : nationName(state.nation, lang);
   if (riderPage) {
-    const detail = state.riderFeed?.key === riderKey(state.rider) ? riderDetail(state.riderFeed.feed) : null;
+    const detail = state.riderFeed?.key === riderKey(state.rider) ? riderDetail(state.riderFeed.feed, { throughDay: throughDay(state.rider.cod) }) : null;
     document.title = `${detail ? detail.name : `Rider ${state.rider.num}`}, ISDE 2026`;
   } else {
-    document.title = state.view === 'teams' ? `Team standings, ISDE 2026 day ${state.day}` : `${who}, ISDE 2026 day ${state.day}`;
+    const dayLabel = state.day === FINAL ? (eventComplete() ? 'final' : 'overall') : `day ${state.day}`;
+    document.title = state.view === 'teams' ? `Team standings, ISDE 2026 ${dayLabel}` : `${who}, ISDE 2026 ${dayLabel}`;
   }
 }
 
 function paintRiderPage() {
   const key = riderKey(state.rider);
   const feed = state.riderFeed?.key === key ? state.riderFeed.feed : null;
-  const detail = feed ? riderDetail(feed) : null;
+  const detail = feed ? riderDetail(feed, { throughDay: throughDay(state.rider.cod) }) : null;
   const team = detail ? state.teams[state.rider.cod]?.[detail.num]?.team ?? '' : '';
   // Out-of-race note from any loaded day of the rider's event.
   const retired = detail
     ? Object.values(state.dayClass[state.rider.cod] ?? {}).map((cg) => retiredMap(cg)[detail.num]).find(Boolean) ?? ''
     : '';
+  const lastDay = detail ? Math.max(0, ...Object.keys(detail.overallByDay).map(Number)) : 0;
+  const final = lastDay
+    ? { ...detail.overallByDay[lastDay], afterDay: lastDay, complete: lastDay === 6 && eventComplete() }
+    : null;
   renderRider(els.main, {
     detail,
     team,
     retired,
+    final,
     backHref: hashFor(state.nation, state.day, state.listView),
     backLabel: state.listView === 'teams' ? 'Back to teams' : 'Back to riders',
     loading: !feed && !state.riderError,
@@ -273,10 +340,23 @@ async function refreshRider() {
 
 let dayToken = 0;
 async function refreshDay() {
-  const { day, nation, view } = state;
+  const day = feedDay();
+  const { nation, view } = state;
   const token = ++dayToken;
   state.loading = true;
   paint();
+
+  if (state.day === FINAL) {
+    await Promise.all(
+      GROUPS.map((g) =>
+        getJson(urls.final(g.cod))
+          .then((json) => {
+            state.final[g.cod] = json;
+          })
+          .catch(() => {}), // no archived classification (live event): built from rider feeds instead
+      ),
+    );
+  }
 
   const results = await Promise.allSettled(
     GROUPS.map(async (g) => {
@@ -340,7 +420,9 @@ async function refreshOverall() {
       const settled = await Promise.allSettled(nums.map((n) => getJson(urls.rider(g.cod, n))));
       settled.forEach((res, i) => {
         if (res.status === 'fulfilled') {
-          (state.overall[g.cod] ??= {})[nums[i]] = overallFromDays(res.value?.data?.days);
+          (state.overall[g.cod] ??= {})[nums[i]] = overallFromDays(res.value?.data?.days, { throughDay: throughDay(g.cod) });
+          const standing = finalStanding(res.value, { throughDay: throughDay(g.cod) });
+          if (standing) (state.standing[g.cod] ??= {})[nums[i]] = standing;
         }
       });
     }),
@@ -421,16 +503,18 @@ async function init() {
     return;
   }
   state.latestDay = Math.max(...GROUPS.map((g) => latestDay(state.programs[g.cod])));
-  state.day = initial.day ?? state.latestDay;
+  state.day = initial.day ?? (eventComplete() ? FINAL : state.latestDay);
   state.nation = validNation(state.nation);
 
   await refreshDay();
   refreshOverall();
   refreshRider();
 
-  setInterval(refreshDay, DAY_REFRESH_MS);
-  setInterval(refreshRider, DAY_REFRESH_MS);
-  setInterval(refreshOverall, OVERALL_REFRESH_MS);
+  if (!ARCHIVED) {
+    setInterval(refreshDay, DAY_REFRESH_MS);
+    setInterval(refreshRider, DAY_REFRESH_MS);
+    setInterval(refreshOverall, OVERALL_REFRESH_MS);
+  }
   window.addEventListener('hashchange', applyHash);
   els.nation.addEventListener('change', () => {
     location.hash = hashFor(els.nation.value, state.day, state.view);

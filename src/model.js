@@ -6,6 +6,9 @@ const NATION = 'CZE';
 /** Pass as `nation` to select every rider. */
 export const ALL = 'ALL';
 
+/** Pass as `day` for the final / cumulative classification. */
+export const FINAL = 'final';
+
 /** "1:02'27.75" | "7'20.89" | "55.42" → seconds (number) or null when missing. */
 export function parseTime(value) {
   if (value == null) return null;
@@ -187,38 +190,54 @@ export function bestPerTest(rows, cols) {
   return best;
 }
 
-/** A days[] entry is real only once the day has a classification (ctp). Unfinished days
- *  are listed with a placeholder total (three hours per missing day) and no ctp. */
-const isFinishedDay = (entry) => Boolean(entry?.ctp?.Tempo && entry?.rtp?.Tempo);
-
-/**
- * Cumulative standing from the per-rider feed (resultconc → data.days).
- * The provider's entry "giornata k" holds the classification of day k+1 and
- * the cumulative total through day k+1 (day 1 alone is never listed).
- * Returns the latest finished day, or null when no day after day 1 is finished.
- */
-export function overallFromDays(days) {
-  if (!Array.isArray(days)) return null;
-  let found = null;
-  for (const entry of days) {
-    const rtp = entry?.rtp;
-    if (isFinishedDay(entry)) {
-      found = {
-        afterDay: (toInt(entry.giornata) ?? 0) + 1,
-        pos: toInt(rtp.Pos),
-        time: rtp.Tempo,
-        dayPos: toInt(entry.ctp?.Pos),
-        dayTime: entry.ctp?.Tempo ?? '',
-      };
-    }
-  }
-  return found;
+/** Last day (1–6) the programme marks as finished, 0 when none. */
+export function lastCompletedDay(program) {
+  let last = 0;
+  for (let day = 1; day <= 6; day += 1) if (dayComplete(program, day)) last = day;
+  return last;
 }
 
-/** True when every special test of the given day is marked finished in the program feed. */
+/**
+ * The real entries of a per-rider days[] list, keyed by day. The provider's entry
+ * "giornata k" holds day k+1 (day 1 alone is never listed). While the event runs,
+ * every unfinished day is listed with a placeholder total (three hours per missing
+ * day) and no day classification (ctp). With throughDay (the last day the programme
+ * has finished) an entry counts when its day is finished, which includes the
+ * penalty entries of riders who retired; without it, only entries with a ctp count.
+ */
+function dayEntries(days, throughDay) {
+  const out = {};
+  for (const entry of Array.isArray(days) ? days : []) {
+    if (!entry?.rtp?.Tempo) continue;
+    const day = (toInt(entry.giornata) ?? 0) + 1;
+    const real = throughDay != null ? day <= throughDay : Boolean(entry.ctp?.Tempo);
+    if (real) out[day] = entry;
+  }
+  return out;
+}
+
+/**
+ * Cumulative standing from the per-rider feed (resultconc → data.days):
+ * the latest real entry, or null when nothing after day 1 counts yet.
+ */
+export function overallFromDays(days, { throughDay = null } = {}) {
+  const entries = dayEntries(days, throughDay);
+  const last = Math.max(0, ...Object.keys(entries).map(Number));
+  if (!last) return null;
+  const entry = entries[last];
+  return {
+    afterDay: last,
+    pos: toInt(entry.rtp.Pos),
+    time: entry.rtp.Tempo,
+    dayPos: toInt(entry.ctp?.Pos),
+    dayTime: entry.ctp?.Tempo ?? '',
+  };
+}
+
+/** True when every special test of the given day is finished (2) or cancelled (3) in the program feed. */
 export function dayComplete(program, day) {
   const stages = (program?.data ?? []).filter((s) => s.Tipo === 'PS' && toInt(s.Day) === day);
-  return stages.length > 0 && stages.every((s) => s.StageStatus === '2');
+  return stages.length > 0 && stages.every((s) => s.StageStatus === '2' || s.StageStatus === '3');
 }
 
 // ---- Teams -------------------------------------------------------------
@@ -337,7 +356,7 @@ export function teamsOfNation(standings, nation) {
  * tests per day with time, position in the test and standing after it,
  * the day standing (after the last finished test) and the cumulative overall.
  */
-export function riderDetail(feed) {
+export function riderDetail(feed, { throughDay = null } = {}) {
   const driver = feed?.data?.driver;
   if (!driver) return null;
   const list = feed.data.list_ps ?? [];
@@ -364,8 +383,11 @@ export function riderDetail(feed) {
     entry.last = ps.rps ?? {};
   }
   const overallByDay = {};
-  for (const d of feed.data.days ?? []) {
-    if (isFinishedDay(d)) overallByDay[(toInt(d.giornata) ?? 0) + 1] = { pos: toInt(d.rtp.Pos), time: d.rtp.Tempo };
+  const classByDay = {}; // official day classification, present once the rider finished the day
+  for (const [dayKey, d] of Object.entries(dayEntries(feed.data.days, throughDay))) {
+    const day = Number(dayKey);
+    overallByDay[day] = { pos: toInt(d.rtp.Pos), time: d.rtp.Tempo };
+    if (d.ctp?.Tempo) classByDay[day] = { pos: toInt(d.ctp.Pos), time: d.ctp.Tempo };
   }
   const days = [...byDay.values()]
     .filter((d) => d.lastCode)
@@ -373,12 +395,13 @@ export function riderDetail(feed) {
     .map((d) => {
       for (const code of testCodes) if (!(code in d.tests)) d.tests[code] = null;
       const overall = overallByDay[d.day] ?? (d.day === 1 ? { pos: toInt(d.last.Pos), time: d.last.Tempo ?? '' } : null);
+      const official = classByDay[d.day];
       return {
         day: d.day,
         tests: d.tests,
         lastCode: d.lastCode,
-        dayTime: d.last.Tempo ?? '',
-        dayPos: toInt(d.last.Pos),
+        dayTime: official?.time ?? d.last.Tempo ?? '',
+        dayPos: official?.pos ?? toInt(d.last.Pos),
         dayGap: d.last.Dist ?? '',
         timeControl: d.last.Penco ?? '',
         penalty: d.last.Pen ?? '',
@@ -394,5 +417,67 @@ export function riderDetail(feed) {
     cat: driver.q ?? '',
     testCodes,
     days,
+    overallByDay,
   };
+}
+
+// ---- Final classification -------------------------------------------
+
+/** One rider's line for the final (or current cumulative) classification. */
+export function finalStanding(feed, { throughDay = null } = {}) {
+  const d = riderDetail(feed, { throughDay });
+  if (!d) return null;
+  const lastDay = Math.max(0, ...Object.keys(d.overallByDay).map(Number));
+  const last = lastDay
+    ? { day: lastDay, overall: d.overallByDay[lastDay] }
+    : d.days.find((x) => x.day === 1 && x.overall); // day 1 alone: the day classification
+  return {
+    num: d.num,
+    name: d.name,
+    nation: d.nation,
+    bike: d.bike,
+    cls: d.cls,
+    cat: d.cat,
+    days: d.days.map((x) => ({ day: x.day, pos: x.dayPos, time: x.dayTime })),
+    total: last ? { pos: last.overall.pos, time: last.overall.time, afterDay: last.day } : null,
+  };
+}
+
+/** Final classification rows for a nation (or ALL), by final position; unclassified riders last. */
+export function finalRows(riders, { nation = ALL } = {}) {
+  return (riders ?? [])
+    .filter((r) => nation === ALL || r.nation === nation)
+    .sort((a, b) => {
+      const pa = a.total?.pos ?? Infinity;
+      const pb = b.total?.pos ?? Infinity;
+      return pa - pb || String(a.name).localeCompare(String(b.name));
+    });
+}
+
+/** Gap to the overall leader and positions within category and class, over the whole final list. */
+export function finalRanks(riders) {
+  const classified = (riders ?? []).filter((r) => r.total?.pos != null).sort((a, b) => a.total.pos - b.total.pos);
+  const leaderSec = classified.length ? parseTime(classified[0].total.time) : null;
+  const catCount = {};
+  const classCount = {};
+  const catSize = {};
+  const classSize = {};
+  for (const r of classified) {
+    catSize[r.cat] = (catSize[r.cat] ?? 0) + 1;
+    classSize[r.cls] = (classSize[r.cls] ?? 0) + 1;
+  }
+  const out = {};
+  for (const r of classified) {
+    catCount[r.cat] = (catCount[r.cat] ?? 0) + 1;
+    classCount[r.cls] = (classCount[r.cls] ?? 0) + 1;
+    const sec = parseTime(r.total.time);
+    out[r.num] = {
+      gap: leaderSec != null && sec != null && sec > leaderSec ? formatTime(Math.round((sec - leaderSec) * 100) / 100) : '',
+      catPos: catCount[r.cat],
+      catSize: catSize[r.cat],
+      classPos: classCount[r.cls],
+      classSize: classSize[r.cls],
+    };
+  }
+  return out;
 }

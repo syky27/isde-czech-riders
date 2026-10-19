@@ -23,12 +23,22 @@ Club, Women's Club, Veteran Club). The provider publishes them after each specia
 cumulative across days, and lists a team only once all its riders have finished that test; each
 category therefore opens on the latest test every team has completed, with buttons for later tests.
 
+## Archive
+
+The timing provider keeps an edition online for about a year. `node scripts/snapshot.mjs` downloads
+every feed the page uses into `data/<EVENT>/END/…json` (same paths as the API) and builds
+`data/<EVENT>/final/<cod>.json`, the final classification derived from the per-rider feeds. With
+`ARCHIVED = true` in `src/api.js` the page reads those files instead of the API and stops refreshing.
+The "Final" tab shows that classification for every rider, with day times and the total.
+
 ## Files
 
 | Path | Purpose |
 | --- | --- |
 | `index.html`, `style.css` | the page |
-| `src/api.js` | feed URLs (change `EVENT` for another edition) |
+| `src/api.js` | feed URLs, live or archived (change `EVENT` for another edition) |
+| `scripts/snapshot.mjs` | archives all feeds and builds the final classification |
+| `data/` | the archived feeds of ISDE 2026 |
 | `src/nations.js` | nation codes → names and flags |
 | `src/model.js` | pure data transformations, unit-tested |
 | `src/render.js` | HTML rendering |

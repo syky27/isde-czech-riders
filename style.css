@@ -125,6 +125,7 @@ abbr[title] { text-decoration: none; }
   margin-bottom: 2px;
 }
 
+.day--final { font-size: 24px; padding-bottom: 8px; }
 .day.is-future { color: var(--ink-soft); opacity: 0.55; }
 .day:hover { border-bottom-color: var(--rule); }
 .day.is-current { color: var(--red); border-bottom-color: var(--red); opacity: 1; }
@@ -411,6 +412,7 @@ main { max-width: 1400px; margin: 0 auto; }
 .rider-panel__name .num { font-size: 18px; }
 .rider-panel__meta { margin: 4px 0 0; color: var(--ink-soft); font-size: 14px; }
 .rider-panel__out { margin: 4px 0 0; color: var(--red); font-size: 14px; }
+.rider-panel__final { margin: 6px 0 0; font-size: 15px; }
 
 .rider-panel__close {
   flex: none;

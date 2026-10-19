@@ -15,6 +15,9 @@ import {
   surname,
   ordinal,
   riderDetail,
+  finalStanding,
+  finalRows,
+  lastCompletedDay,
   parseTime,
   formatTime,
   testColumns,
@@ -49,6 +52,9 @@ const rc33 = fixture('resultconc_2025_ISDE1_33.json');
 const rc255 = fixture('resultconc_2025_ISDE1_255.json');
 const rc184 = fixture('resultconc_ISDE1_184.json');
 const rcLive = fixture('resultconc_ISDE1_10_day2_live.json');
+const rcFinal = fixture('resultconc_ISDE1_184_final.json');
+const programFinal = fixture('program_ISDE1_final.json');
+const rcDnf = fixture('resultconc_ISDE2_603_dnf.json');
 
 test('parseTime handles Microplus time strings', () => {
   assert.equal(parseTime("7'20.89"), 440.89);
@@ -371,4 +377,76 @@ test('overallFromDays ignores the provider’s placeholder entries for days not 
   assert.equal(d.days[1].day, 2);
   assert.equal(d.days[1].lastCode, 'ST1');
   assert.equal(d.days[1].overall, null);
+});
+
+test('dayComplete treats cancelled tests (status 3) as finished', () => {
+  // Day 3 of ISDE 2026 had ST1 and ST4 cancelled: statuses 3,2,2,3,2,2.
+  assert.equal(dayComplete(programFinal, 3), true);
+  for (const day of [1, 2, 4, 5, 6]) assert.equal(dayComplete(programFinal, day), true);
+});
+
+test('riderDetail prefers the official day classification for finished days', () => {
+  const d = riderDetail(rcFinal);
+  assert.equal(d.days.length, 6);
+  assert.deepEqual(d.days.map((x) => [x.day, x.dayPos, x.dayTime]), [
+    [1, 72, "51'23.36"],
+    [2, 59, "51'06.04"],
+    [3, 48, "28'11.68"],
+    [4, 54, "20'55.03"],
+    [5, 52, "33'41.99"],
+    [6, 55, "14'31.11"],
+  ]);
+  assert.deepEqual(d.days[5].overall, { pos: 56, time: "3:19'49.21" });
+});
+
+test('finalStanding summarises a rider for the final classification', () => {
+  const f = finalStanding(rcFinal);
+  assert.equal(f.num, '184');
+  assert.equal(f.name, 'CHLUM Matyas');
+  assert.equal(f.nation, 'CZE');
+  assert.equal(f.cls, 'E2');
+  assert.equal(f.cat, 'JWT');
+  assert.deepEqual(f.days[0], { day: 1, pos: 72, time: "51'23.36" });
+  assert.deepEqual(f.days[5], { day: 6, pos: 55, time: "14'31.11" });
+  assert.deepEqual(f.total, { pos: 56, time: "3:19'49.21", afterDay: 6 });
+  const live = finalStanding(rcLive);
+  assert.deepEqual(live.total, { pos: 1, time: "46'26.88", afterDay: 1 });
+  assert.equal(finalStanding(null), null);
+});
+
+test('finalRows filters by nation and orders by final position, unclassified riders last', () => {
+  const riders = [
+    { num: '2', name: 'B', nation: 'CZE', total: { pos: 2, time: "2'00.00", afterDay: 6 } },
+    { num: '9', name: 'Z', nation: 'CZE', total: null },
+    { num: '1', name: 'A', nation: 'ITA', total: { pos: 1, time: "1'00.00", afterDay: 6 } },
+    { num: '3', name: 'C', nation: 'CZE', total: { pos: 3, time: "3'00.00", afterDay: 6 } },
+  ];
+  assert.deepEqual(finalRows(riders, { nation: 'CZE' }).map((r) => r.num), ['2', '3', '9']);
+  assert.deepEqual(finalRows(riders, { nation: ALL }).map((r) => r.num), ['1', '2', '3', '9']);
+  assert.deepEqual(finalRows(null, { nation: ALL }), []);
+});
+
+test('lastCompletedDay counts finished days from the programme', () => {
+  assert.equal(lastCompletedDay(programFinal), 6);
+  assert.equal(lastCompletedDay(program26), 0);
+  assert.equal(lastCompletedDay({ data: [] }), 0);
+});
+
+test('with throughDay the cumulative standing uses every day the programme has finished', () => {
+  // Day 2 in progress: nothing after day 1 counts, whatever the feed lists.
+  assert.equal(overallFromDays(rcLive.data.days, { throughDay: 1 }), null);
+  // Event over: the last entry counts, including penalty days of riders who retired.
+  assert.deepEqual(overallFromDays(rcFinal.data.days, { throughDay: 6 }), {
+    afterDay: 6,
+    pos: 56,
+    time: "3:19'49.21",
+    dayPos: 55,
+    dayTime: "14'31.11",
+  });
+  const dnf = finalStanding(rcDnf, { throughDay: 6 });
+  assert.equal(dnf.name, 'KOUBLE Krystof');
+  assert.equal(dnf.days.length, 4); // did not start day 5
+  assert.deepEqual(dnf.total, { pos: 278, time: "8:30'07.63", afterDay: 6 });
+  // Without throughDay the retired days have no classification and are left out.
+  assert.deepEqual(finalStanding(rcDnf).total, { pos: 2, time: "2:30'07.63", afterDay: 4 });
 });
